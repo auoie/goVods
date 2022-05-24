@@ -1,50 +1,66 @@
-package govods
+package goVods
 
 import (
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/grafov/m3u8"
 )
 
-func downloadVideo(filepath string, url string) error {
-	res, err := http.Get(url)
+type HlsDl struct {
+	client        *http.Client
+	directoryPath string
+	hlsDpi        DomainPathIdentifier
+}
+
+func NewHlsDl(hlsUrl DomainPathIdentifier, dir string) *HlsDl {
+	client := &http.Client{}
+	return &HlsDl{client, dir, hlsUrl}
+}
+
+func newRequest(url string) (*http.Request, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+func (hlsDl *HlsDl) DownloadSegment(dst io.Writer, segment *m3u8.MediaSegment) error {
+	url := hlsDl.hlsDpi.GetSegmenChunkedtUrl(segment)
+	req, err := newRequest(url)
+	if err != nil {
+		return err
+	}
+	res, err := hlsDl.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
-	out, err := os.Create(filepath)
+	if res.StatusCode != 200 {
+		return errors.New(res.Status)
+	}
+	_, err = io.Copy(dst, res.Body)
+	return err
+}
+
+func (hlsDl *HlsDl) DownloadSegments(segments []*m3u8.MediaSegment) error {
+	filePath := filepath.Join(hlsDl.directoryPath, "index.ts")
+	out, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	fmt.Println("Downloading to", filepath)
-	_, err = io.Copy(out, res.Body)
-	return err
-}
-
-func DownloadTwitchVod(videoData TwitchTrackerData, dpi DomainPathIdentifier, numWorkers int) {
-	directory := filepath.Join("Downloads", videoData.StreamerName, fmt.Sprint(videoData.VideoId))
-	if err := os.MkdirAll(directory, os.ModePerm); err != nil {
-		log.Fatal(err)
-	}
-	processedUris, err := getChunkUris(dpi)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(processedUris)
-	jobs := []func() error{}
-	for _, processedUri := range processedUris {
-		url := dpi.getChunkUrl(processedUri)
-		filePath := filepath.Join(directory, processedUri)
-		job := func() error {
-			return downloadVideo(filePath, url)
+	for _, segment := range segments {
+		fmt.Println("Downloading", segment.URI)
+		err = hlsDl.DownloadSegment(out, segment)
+		if err != nil {
+			return err
 		}
-		jobs = append(jobs, job)
 	}
-	for _, job := range jobs {
-		job()
-	}
+	return nil
 }
