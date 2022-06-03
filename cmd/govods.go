@@ -121,6 +121,77 @@ func main() {
 					return downloadVod(videoData)
 				},
 			},
+			{
+				Name:  "manual-download",
+				Usage: "Download a Twitch VOD",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "streamer",
+						Usage:    "twitch streamer name",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "videoid",
+						Usage:    "twitch tracker video id",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "time",
+						Usage:    "stream UTC start time in the format 2006-01-2 15:04:05",
+						Required: true,
+					},
+				},
+				Action: func(ctx *cli.Context) error {
+					streamer := ctx.String("streamer")
+					videoid := ctx.String("videoid")
+					time := ctx.String("time")
+					twitchData := govods.TwitchTrackerData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
+					fmt.Println(twitchData)
+					videoData, err := twitchData.GetVideoData()
+					if err != nil {
+						return err
+					}
+					return downloadVod(videoData)
+				},
+			},
+			{
+				Name:  "get-m3u8",
+				Usage: "Get m3u8 file which can be viewed in media player",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "url",
+						Usage:    "Twitch tracker URL for the Twitch stream",
+						Required: true,
+					},
+				},
+				Action: func(ctx *cli.Context) error {
+					twitchTrackerUrl := ctx.String("url")
+					twitchData, err := govods.GetTwitchTrackerData(twitchTrackerUrl)
+					if err != nil {
+						return err
+					}
+					videoData, err := twitchData.GetVideoData()
+					if err != nil {
+						return err
+					}
+					validPathIdentifiers, err := videoData.GetValidLinks(DOMAINS)
+					if err != nil {
+						return err
+					}
+					if len(validPathIdentifiers) == 0 {
+						return errors.New("no valid urls were found")
+					}
+					dpi := validPathIdentifiers[0]
+					mediapl, err := govods.FetchMediaPlaylist(dpi.GetIndexDvrUrl())
+					if err != nil {
+						return err
+					}
+					govods.MuteMediaSegments(mediapl)
+					dpi.MakePathsExplicit(mediapl)
+					fmt.Println(mediapl.String())
+					return nil
+				},
+			},
 		},
 	}
 	err := app.Run(os.Args)

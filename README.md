@@ -3,11 +3,19 @@
 ## Usage
 
 ```bash
+# Make the binary 
+go build ./cmd/govods.go
+
+# Get m3u8 file, serve it over local web server, and play it from mpv
+./govods get-m3u8 --url https://twitchtracker.com/{streamer}/streams/{video} > vid.m3u8
+python3 -m http.server 8080
+mpv http://localhost:8080/vid.m3u8
+
 # Get .m3u8 files names
-go run ./cmd/govods.go urls --url https://twitchtracker.com/{streamer}/streams/{video}
+./govods urls --url https://twitchtracker.com/{streamer}/streams/{video}
 
 # Download the VOD to ./Downloads/{streamer}/{video}/index.ts
-go run ./cmd/govods.go download --url https://twitchtracker.com/{streamer}/streams/{video}
+./govods download --url https://twitchtracker.com/{streamer}/streams/{video}
 ```
 
 ## About
@@ -15,7 +23,7 @@ go run ./cmd/govods.go download --url https://twitchtracker.com/{streamer}/strea
 - This is just used for downloading Twitch VODs that are sub only or unlisted.
   Basically just go to https://twitchtracker.com/ and find the stream you want to download.
   Then copy that link and paste it into the program.
-- If a VOD is public, then you can get the URL of a HLS media manifest (stream download link)
+- If a VOD is public, there is an easier way get a VOD. You can get the URL of a HLS media manifest (stream download link)
   by going directly to the VOD and opening the Chrome Developer Tools > Network.
   It should be under Fetch/XHR.
   For example, the response might include

@@ -100,9 +100,18 @@ func (d *DomainPathIdentifier) GetIndexDvrUrl() string {
 	return d.domain + d.pathIdentifer + "/chunked/index-dvr.m3u8"
 }
 
-func (d *DomainPathIdentifier) GetSegmenChunkedtUrl(segment *m3u8.MediaSegment) string {
+func (d *DomainPathIdentifier) GetSegmentChunkedUrl(segment *m3u8.MediaSegment) string {
 	return d.domain + d.pathIdentifer + "/chunked/" + segment.URI
+}
 
+func (d *DomainPathIdentifier) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *m3u8.MediaPlaylist {
+	for _, segment := range playlist.Segments {
+		if segment == nil {
+			continue
+		}
+		segment.URI = d.GetSegmentChunkedUrl(segment)
+	}
+	return playlist
 }
 
 func DecodeMediaPlaylist(reader io.Reader, strict bool) (*m3u8.MediaPlaylist, error) {
@@ -116,16 +125,8 @@ func DecodeMediaPlaylist(reader io.Reader, strict bool) (*m3u8.MediaPlaylist, er
 	return p.(*m3u8.MediaPlaylist), nil
 }
 
-func (dpi *DomainPathIdentifier) GetMediaSegments() ([]*m3u8.MediaSegment, error) {
-	res, err := http.Get(dpi.GetIndexDvrUrl())
-	if err != nil {
-		return nil, err
-	}
-	mediapl, err := DecodeMediaPlaylist(res.Body, true)
-	if err != nil {
-		return nil, err
-	}
-	nonnilSegments := lo.Filter(mediapl.Segments, func(segment *m3u8.MediaSegment, index int) bool {
+func MuteMediaSegments(playlist *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
+	nonnilSegments := lo.Filter(playlist.Segments, func(segment *m3u8.MediaSegment, index int) bool {
 		return segment != nil
 	})
 	lo.ForEach(nonnilSegments, func(segment *m3u8.MediaSegment, index int) {
@@ -139,5 +140,26 @@ func (dpi *DomainPathIdentifier) GetMediaSegments() ([]*m3u8.MediaSegment, error
 		}
 		segment.URI = getNewURI(segment.URI)
 	})
+	return nonnilSegments
+}
+
+func FetchMediaPlaylist(url string) (*m3u8.MediaPlaylist, error) {
+	res, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	mediapl, err := DecodeMediaPlaylist(res.Body, true)
+	if err != nil {
+		return nil, err
+	}
+	return mediapl, err
+}
+
+func (dpi *DomainPathIdentifier) GetMediaSegments() ([]*m3u8.MediaSegment, error) {
+	mediapl, err := FetchMediaPlaylist(dpi.GetIndexDvrUrl())
+	if err != nil {
+		return nil, err
+	}
+	nonnilSegments := MuteMediaSegments(mediapl)
 	return nonnilSegments, nil
 }

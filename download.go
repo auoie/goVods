@@ -31,7 +31,7 @@ func newRequest(url string) (*http.Request, error) {
 }
 
 func (hlsDl *HlsDl) DownloadSegment(dst io.Writer, segment *m3u8.MediaSegment) error {
-	url := hlsDl.hlsDpi.GetSegmenChunkedtUrl(segment)
+	url := hlsDl.hlsDpi.GetSegmentChunkedUrl(segment)
 	req, err := newRequest(url)
 	if err != nil {
 		return err
