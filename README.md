@@ -3,7 +3,7 @@
 ## Usage
 
 ```bash
-# Make the binary 
+# Make the binary
 go build ./cmd/govods.go
 
 # Get m3u8 file, serve it over local web server, and play it from mpv
@@ -13,9 +13,6 @@ mpv http://localhost:8080/vid.m3u8
 
 # Get .m3u8 files names
 ./govods urls --url https://twitchtracker.com/{streamer}/streams/{video}
-
-# Download the VOD to ./Downloads/{streamer}/{video}/index.ts
-./govods download --url https://twitchtracker.com/{streamer}/streams/{video}
 ```
 
 ## About
@@ -48,6 +45,7 @@ mpv http://localhost:8080/vid.m3u8
 
   This is better because `yt-dlp` is a much more thoroughly tested piece of software.
   It is likely to be faster and have more features such as pausing the download.
+  You could also use an application like MPV and VLC to view the video.
 
 ## Notes
 
@@ -59,8 +57,6 @@ mpv http://localhost:8080/vid.m3u8
 ## Todo
 
 - [x] Get valid `index-dvr.m3u8` URLS for VOD.
-- [ ] Add support for concurrent downloads
-- [ ] Add the option to restart downloading if the download is interrupted.
 - [ ] Get the HSL master URL so that I can get all of the stream URLs.
-      This will mean that I don't need to write my own `m3u8` downloader.
+      This will mean that I don't need to manually rewrite the `m3u8` segment names.
       Alternatively, find out how to get the unknown value in `index-muted-{unknown}.m3u8`.

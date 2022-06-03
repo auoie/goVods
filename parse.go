@@ -14,32 +14,6 @@ import (
 	"github.com/samber/lo"
 )
 
-type TwitchTrackerData struct {
-	StreamerName string
-	VideoId      string
-	UtcTime      string
-}
-
-func (ttData *TwitchTrackerData) GetVideoData() (VideoData, error) {
-	time, err := time.Parse("2006-01-2 15:04:05", ttData.UtcTime)
-	if err != nil {
-		return VideoData{}, err
-	}
-	return VideoData{
-		StreamerName: ttData.StreamerName,
-		VideoId:      ttData.VideoId,
-		Time:         time,
-	}, nil
-}
-
-func (ttData *TwitchTrackerData) GetValidLinks(domains []string) ([]DomainPathIdentifier, error) {
-	videoData, err := ttData.GetVideoData()
-	if err != nil {
-		return nil, err
-	}
-	return videoData.GetValidLinks(domains)
-}
-
 type VideoData struct {
 	StreamerName string
 	VideoId      string
@@ -153,13 +127,4 @@ func FetchMediaPlaylist(url string) (*m3u8.MediaPlaylist, error) {
 		return nil, err
 	}
 	return mediapl, err
-}
-
-func (dpi *DomainPathIdentifier) GetMediaSegments() ([]*m3u8.MediaSegment, error) {
-	mediapl, err := FetchMediaPlaylist(dpi.GetIndexDvrUrl())
-	if err != nil {
-		return nil, err
-	}
-	nonnilSegments := MuteMediaSegments(mediapl)
-	return nonnilSegments, nil
 }

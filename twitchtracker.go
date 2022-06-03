@@ -6,10 +6,29 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/samber/lo"
 )
+
+type TwitchTrackerData struct {
+	StreamerName string
+	VideoId      string
+	UtcTime      string
+}
+
+func (ttData *TwitchTrackerData) GetVideoData() (VideoData, error) {
+	time, err := time.Parse("2006-01-02 15:04:05", ttData.UtcTime)
+	if err != nil {
+		return VideoData{}, err
+	}
+	return VideoData{
+		StreamerName: ttData.StreamerName,
+		VideoId:      ttData.VideoId,
+		Time:         time,
+	}, nil
+}
 
 type streamerNameAndVideoId struct {
 	StreamerName string

@@ -5,13 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
 	govods "goVods"
 
-	"github.com/grafov/m3u8"
-	"github.com/samber/lo"
 	"github.com/urfave/cli/v2"
 )
 
@@ -33,35 +29,6 @@ var DOMAINS = []string{
 	"https://d1mhjrowxxagfy.cloudfront.net/",
 	"https://ddacn6pr5v0tl.cloudfront.net/",
 	"https://d3aqoihi2n8ty8.cloudfront.net/",
-}
-
-func downloadVod(videoData govods.VideoData) error {
-	validPathIdentifiers, err := videoData.GetValidLinks(DOMAINS)
-	if err != nil {
-		return err
-	}
-	fmt.Println(strings.Join(lo.Map(validPathIdentifiers, func(val govods.DomainPathIdentifier, index int) string {
-		return val.GetIndexDvrUrl()
-	}), "\n"))
-	if len(validPathIdentifiers) == 0 {
-		return errors.New("no valid urls were found")
-	}
-	dpi := validPathIdentifiers[0]
-	processedSegments, err := dpi.GetMediaSegments()
-	if err != nil {
-		return err
-	}
-	fmt.Println(lo.Map(processedSegments, func(val *m3u8.MediaSegment, index int) string { return val.URI }))
-	directoryPath := filepath.Join("Downloads", videoData.StreamerName, fmt.Sprint(videoData.VideoId))
-	if err := os.MkdirAll(directoryPath, os.ModePerm); err != nil {
-		return err
-	}
-	hlsdl := govods.NewHlsDl(dpi, directoryPath)
-	err = hlsdl.DownloadSegments(processedSegments)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func main() {
@@ -98,32 +65,8 @@ func main() {
 				},
 			},
 			{
-				Name:  "download",
-				Usage: "Download a Twitch VOD",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "url",
-						Usage:    "Twitch tracker URL for the Twitch stream",
-						Required: true,
-					},
-				},
-				Action: func(ctx *cli.Context) error {
-					twitchTrackerUrl := ctx.String("url")
-					twitchData, err := govods.GetTwitchTrackerData(twitchTrackerUrl)
-					if err != nil {
-						return err
-					}
-					fmt.Println(twitchData)
-					videoData, err := twitchData.GetVideoData()
-					if err != nil {
-						return err
-					}
-					return downloadVod(videoData)
-				},
-			},
-			{
-				Name:  "manual-download",
-				Usage: "Download a Twitch VOD",
+				Name:  "manual-get-m3u8",
+				Usage: "Get m3u8 file which can be viewed in media player",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "streamer",
@@ -137,7 +80,7 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name:     "time",
-						Usage:    "stream UTC start time in the format 2006-01-2 15:04:05",
+						Usage:    "stream UTC start time in the format '2006-01-02 15:04:05'",
 						Required: true,
 					},
 				},
@@ -146,12 +89,26 @@ func main() {
 					videoid := ctx.String("videoid")
 					time := ctx.String("time")
 					twitchData := govods.TwitchTrackerData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
-					fmt.Println(twitchData)
 					videoData, err := twitchData.GetVideoData()
 					if err != nil {
 						return err
 					}
-					return downloadVod(videoData)
+					validPathIdentifiers, err := videoData.GetValidLinks(DOMAINS)
+					if err != nil {
+						return err
+					}
+					if len(validPathIdentifiers) == 0 {
+						return errors.New("no valid urls were found")
+					}
+					dpi := validPathIdentifiers[0]
+					mediapl, err := govods.FetchMediaPlaylist(dpi.GetIndexDvrUrl())
+					if err != nil {
+						return err
+					}
+					govods.MuteMediaSegments(mediapl)
+					dpi.MakePathsExplicit(mediapl)
+					fmt.Println(mediapl.String())
+					return nil
 				},
 			},
 			{
