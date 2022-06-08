@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/grafov/m3u8"
@@ -18,6 +20,11 @@ type VideoData struct {
 	StreamerName string
 	VideoId      string
 	Time         time.Time
+}
+
+func (videoData *VideoData) String() string {
+	values := []string{videoData.StreamerName, videoData.Time.Format("2006-01-02_15:04:05"), videoData.VideoId}
+	return strings.Join(values, "_")
 }
 
 func (videoData *VideoData) GetUrlPathUniqueIdentifier() string {
@@ -31,43 +38,82 @@ func (videoData *VideoData) GetUrlPathUniqueIdentifier() string {
 	return formattedBaseUrl
 }
 
-func (videoData *VideoData) GetValidLinks(domains []string) ([]DomainPathIdentifier, error) {
-	res := []DomainPathIdentifier{}
+func (videoData *VideoData) WithOffset(seconds int) *VideoData {
+	return &VideoData{
+		StreamerName: videoData.StreamerName,
+		VideoId:      videoData.VideoId,
+		Time:         videoData.Time.Add(time.Second * time.Duration(seconds)),
+	}
+}
+
+func (videoData *VideoData) GetDpi(domain string) DomainPathIdentifier {
 	pathIdentifier := videoData.GetUrlPathUniqueIdentifier()
-	type GetUrlResponse struct {
-		url        DomainPathIdentifier
-		successful bool
-	}
-	ch := make(chan GetUrlResponse)
-	httpGetReturns200 := func(url string) bool {
-		resp, err := http.Get(url)
-		if err != nil {
-			return false
-		}
-		return resp.StatusCode == http.StatusOK
-	}
-	checkDpiAsync := func(dpi DomainPathIdentifier, ch chan<- GetUrlResponse) {
-		if httpGetReturns200(dpi.GetIndexDvrUrl()) {
-			ch <- GetUrlResponse{url: dpi, successful: true}
-		} else {
-			ch <- GetUrlResponse{successful: false}
-		}
-	}
+	return DomainPathIdentifier{domain: domain, pathIdentifer: pathIdentifier}
+}
+
+func (videoData *VideoData) GetDpis(domains []string) []DomainPathIdentifier {
+	res := []DomainPathIdentifier{}
 	for _, domain := range domains {
-		go checkDpiAsync(DomainPathIdentifier{domain, pathIdentifier}, ch)
+		res = append(res, videoData.GetDpi(domain))
 	}
-	for range domains {
-		domainResponse := <-ch
-		if domainResponse.successful {
-			res = append(res, domainResponse.url)
-		}
+	return res
+}
+
+// https://stackoverflow.com/questions/58427586/how-to-return-first-http-response-to-answer
+func GetFirstValidDpi(dpis []DomainPathIdentifier) (*DomainPathIdentifier, error) {
+	wg := sync.WaitGroup{}
+	ch := make(chan *DomainPathIdentifier, len(dpis))
+	for _, dpi := range dpis {
+		wg.Add(1)
+		go func(dpi DomainPathIdentifier) {
+			defer wg.Done()
+			resp, err := http.Get(dpi.GetIndexDvrUrl())
+			if err != nil {
+				return
+			}
+			if resp.StatusCode == http.StatusOK {
+				ch <- &dpi
+			}
+		}(dpi)
 	}
-	return res, nil
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+	result, ok := <-ch
+	if !ok {
+		return nil, errors.New("no valid links were found")
+	}
+	return result, nil
 }
 
 type DomainPathIdentifier struct {
 	domain        string // e.g. https://d1m7jfoe9zdc1j.cloudfront.net/
-	pathIdentifer string // e.g. d138758a032739b16ab9_goonergooch_46448856909_1653186703
+	pathIdentifer string // e.g. {hash}_{streamername}_{videoid}_{unixtime}
+}
+
+func (d *DomainPathIdentifier) ToVideoData() (*VideoData, error) {
+	allUnderscoreIndices := []int{}
+	for i := 0; i < len(d.pathIdentifer); i++ {
+		char := d.pathIdentifer[i]
+		if char == '_' {
+			allUnderscoreIndices = append(allUnderscoreIndices, i)
+		}
+	}
+	numUnderscores := len(allUnderscoreIndices)
+	if numUnderscores < 3 {
+		return nil, errors.New("the pathIdentifer doesn't have enough enough underscores")
+	}
+	underscoreIndices := [3]int{allUnderscoreIndices[0], allUnderscoreIndices[numUnderscores-2], allUnderscoreIndices[numUnderscores-1]}
+	streamerName := d.pathIdentifer[underscoreIndices[0]+1 : underscoreIndices[1]]
+	videoid := d.pathIdentifer[underscoreIndices[1]+1 : underscoreIndices[2]]
+	unixtimeString := d.pathIdentifer[underscoreIndices[2]+1:]
+	unixtimeInt, err := strconv.ParseInt(unixtimeString, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	videoTime := time.Unix(unixtimeInt, 0)
+	return &VideoData{StreamerName: streamerName, VideoId: videoid, Time: videoTime}, nil
 }
 
 func (d *DomainPathIdentifier) GetIndexDvrUrl() string {
@@ -122,9 +168,15 @@ func FetchMediaPlaylist(url string) (*m3u8.MediaPlaylist, error) {
 	if err != nil {
 		return nil, err
 	}
-	mediapl, err := DecodeMediaPlaylist(res.Body, true)
-	if err != nil {
-		return nil, err
+	return DecodeMediaPlaylist(res.Body, true)
+}
+
+func GetMediaPlaylistDuration(mediapl *m3u8.MediaPlaylist) time.Duration {
+	duration := 0.0
+	for _, segment := range mediapl.Segments {
+		if segment != nil {
+			duration += segment.Duration
+		}
 	}
-	return mediapl, err
+	return time.Duration(duration * float64(time.Second))
 }

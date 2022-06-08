@@ -2,23 +2,55 @@
 
 ## Usage
 
+Build the binary.
+If you don't want to build it, then just use `go run ./cmd/govods.go {stuff}`.
+
 ```bash
 # Make the binary
 go build ./cmd/govods.go
+```
 
-# Get m3u8 file, serve it over local web server, and play it from mpv
-./govods get-m3u8 --url https://twitchtracker.com/{streamer}/streams/{video} > vid.m3u8
-python3 -m http.server 8080
-mpv http://localhost:8080/vid.m3u8
+Run the program.
+It should work with a `streamscharts.com` or `twitchtracker.com` url.
+In case you get a 503 response, you can manually provide the stream data.
+To manually provide the stream time, you can go directly to the link and inspect the response in Chrome DevTools.
+In the case of `streamscharts.com`, the time field can be found in the `datetime` attribute of the first `<time>` element.
 
-# Get .m3u8 files names
-./govods urls --url https://twitchtracker.com/{streamer}/streams/{video}
+```bash
+# Using a Streams Charts link, write the .m3u8 file to ./Downloads
+./govods sc-url-get-m3u8 --write --url https://streamscharts.com/channels/{streamer}/streams/{videoid}
+
+# Using a Streams Charts link, print the .m3u8 file to stdout
+./govods sc-url-get-m3u8 --url https://streamscharts.com/channels/{streamer}/streams/{videoid}
+
+# Using manually retrieved Stream Charts data, write the .m3u8 file to ./Downloads
+./govods sc-manual-get-m3u8 --write --streamer {streamer} --videoid {videoid} --time {time}
+
+# Using a Twitch Tracker link, write the .m3u8 file to ./Downloads
+./govods tt-url-get-m3u8 --write --url https://twitchtracker.com/{streamer}/streams/{videoid}
+```
+
+Once we have the files, we can serve them over a local web server.
+
+```bash
+# Serve the files over a local web server
+python3 -m http.server 8080 --directory Downloads
+```
+
+Then you can see the files in http://localhost:8080.
+If you're using Google Chrome, you can install the extension
+https://chrome.google.com/webstore/detail/native-hls-playback/emnphkkblegpebimobpbekeedfgemhof and then click on one of the files to play it.
+Alternatively, you can use a media player such as MPV or VLC to play the files.
+
+```bash
+# Play a file with MPV
+mpv http://localhost:8080/{streamername}/{stuff}.m3u8
 ```
 
 ## About
 
 - This is just used for downloading Twitch VODs that are sub only or unlisted.
-  Basically just go to https://twitchtracker.com/ and find the stream you want to download.
+  Basically just go to https://streamscharts.com/ and find the stream you want to download.
   Then copy that link and paste it into the program.
 - If a VOD is public, there is an easier way get a VOD. You can get the URL of a HLS media manifest (stream download link)
   by going directly to the VOD and opening the Chrome Developer Tools > Network.
@@ -53,6 +85,19 @@ mpv http://localhost:8080/vid.m3u8
 - https://github.com/canhlinh/hlsdl
 - https://github.com/melbahja/got
 - https://github.com/yt-dlp/yt-dlp
+- Some `.m3u8` files are much shorter than reported on twitchtracker.
+  It seems that in this case, the `.m3u8` file is ending in
+
+  ```
+  #EXT-X-DISCONTINUITY
+  #EXT-X-TWITCH-DISCONTINUITY
+  #EXT-X-ENDLIST
+  ```
+
+  I was watching another stream and it ended with a stream warning disconnection.
+  So it might happen when the stream goes down but starts up again.
+  TwitchTracker reported the stream as a single stream, but the recording consisted of two separate VODs, each with their own video id. `streamscharts.com` seems to actually separate the two VODs.
+  You can generally get the video id from there.
 
 ## Todo
 
