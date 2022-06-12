@@ -123,6 +123,10 @@ func main() {
 						Name:  "write",
 						Usage: "Rather than printing the file, write the .m3u8 file to the folder ./Downloads/.",
 					},
+					&cli.StringFlag{
+						Name:  "streamer",
+						Usage: "If a streamer changes their username, you need to provide their old username for their vods created before the name change.",
+					},
 				},
 				Action: func(ctx *cli.Context) error {
 					twitchTrackerUrl := ctx.String("url")
@@ -133,6 +137,10 @@ func main() {
 					videoData, err := twitchData.GetVideoData()
 					if err != nil {
 						return err
+					}
+					streamer := ctx.String("streamer")
+					if streamer != "" {
+						videoData.StreamerName = streamer
 					}
 					dpis := videoData.GetDpis(DOMAINS)
 					return mainHelper(dpis, ctx)
@@ -191,6 +199,10 @@ func main() {
 						Name:  "write",
 						Usage: "Rather than printing the file, write the .m3u8 file to the folder ./Downloads/.",
 					},
+					&cli.StringFlag{
+						Name:  "streamer",
+						Usage: "If a streamer changes their username, you need to provide their old username for their vods created before the name change.",
+					},
 				},
 				Action: func(ctx *cli.Context) error {
 					streamsChartsUrl := ctx.String("url")
@@ -201,6 +213,10 @@ func main() {
 					videoData, err := scData.GetVideoData()
 					if err != nil {
 						return err
+					}
+					streamer := ctx.String("streamer")
+					if streamer != "" {
+						videoData.StreamerName = streamer
 					}
 					dpis := []goVods.DomainPathIdentifier{}
 					for i := 0; i < 60; i++ {
