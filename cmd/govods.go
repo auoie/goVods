@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"goVods"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/auoie/goVods"
 	"github.com/urfave/cli/v2"
 )
 

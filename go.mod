@@ -1,4 +1,4 @@
-module goVods
+module github.com/auoie/goVods
 
 go 1.18
 
