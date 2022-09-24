@@ -47,6 +47,26 @@ Alternatively, you can use a media player such as MPV or VLC to play the files.
 mpv http://localhost:8080/{streamername}/{stuff}.m3u8
 ```
 
+## Using SullyGnome
+
+- Open the network tab in developer tools
+- Go to `https://sullygnome.com/channel/{streamer}/streams`
+- There should be a response with the XHR response type. View it.
+- This response should have information about the recent streams in JSON format. It should include the following fields.
+  ```jsonc
+  {
+    "startDateTime": "time", // start time of the stream in 2006-01-02T15:04:05Z format
+    "streamId": "videoid" // video id of the stream
+  }
+  ```
+- Then run the program with sullygnome.
+  ```bash
+  # Using manually retrieved Sully Gnome data, write the .m3u8 file to ./Downloads
+  ./govods sg-manual-get-m3u8 --time {time} --streamer {streamer} --videoid {videoid} --write
+  # Using manually retrieved Sully Gnome data, print the .m3u8 file to stdout
+  ./govods sg-manual-get-m3u8 --time {time} --streamer {streamer} --videoid {videoid} --write
+  ```
+
 ## About
 
 - This is just used for downloading Twitch VODs that are sub only or unlisted.

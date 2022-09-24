@@ -205,6 +205,43 @@ func main() {
 					return mainHelper(dpis, ctx)
 				},
 			},
+			{
+				Name:  "sg-manual-get-m3u8",
+				Usage: "Using sullygnome.com data, get an .m3u8 file which can be viewed in a media player.",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "streamer",
+						Usage:    "twitch streamer name",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "videoid",
+						Usage:    "twitch tracker video id",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "time",
+						Usage:    "stream UTC start time in the format '2006-01-02T15:04:05Z' (year-month-dayThour:minute:secondZ)",
+						Required: true,
+					},
+					&cli.BoolFlag{
+						Name:  "write",
+						Usage: "Rather than printing the file, write the .m3u8 file to the folder ./Downloads/.",
+					},
+				},
+				Action: func(ctx *cli.Context) error {
+					streamer := ctx.String("streamer")
+					videoid := ctx.String("videoid")
+					time := ctx.String("time")
+					sullygnomeData := goVods.SullyGnomeData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
+					videoData, err := sullygnomeData.GetVideoData()
+					if err != nil {
+						return err
+					}
+					dpis := videoData.GetDpis(goVods.DOMAINS)
+					return mainHelper(dpis, ctx)
+				},
+			},
 		},
 	}
 	err := app.Run(os.Args)
