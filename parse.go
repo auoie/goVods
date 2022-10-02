@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/grafov/m3u8"
@@ -79,25 +78,32 @@ func (videoData *VideoData) GetDpis(domains []string) []DomainPathIdentifier {
 	return res
 }
 
-// https://stackoverflow.com/questions/58427586/how-to-return-first-http-response-to-answer
+type DpiResponse struct {
+	dpi   *DomainPathIdentifier
+	valid bool
+}
+
 func GetFirstValidDpi(dpis []DomainPathIdentifier) (*DomainPathIdentifier, error) {
-	wg := sync.WaitGroup{}
-	ch := make(chan *DomainPathIdentifier, len(dpis))
+	ch := make(chan *DomainPathIdentifier)
+	responsesCh := make(chan *DpiResponse)
 	for _, dpi := range dpis {
-		wg.Add(1)
 		go func(dpi DomainPathIdentifier) {
-			defer wg.Done()
 			resp, err := http.Get(dpi.GetIndexDvrUrl())
-			if err != nil {
-				return
-			}
-			if resp.StatusCode == http.StatusOK {
-				ch <- &dpi
+			if err == nil && resp.StatusCode == http.StatusOK {
+				responsesCh <- &DpiResponse{dpi: &dpi, valid: true}
+			} else {
+				responsesCh <- &DpiResponse{dpi: &dpi, valid: false}
 			}
 		}(dpi)
 	}
 	go func() {
-		wg.Wait()
+		for range dpis {
+			dpiResponse := <-responsesCh
+			if dpiResponse.valid {
+				ch <- dpiResponse.dpi
+				return
+			}
+		}
 		close(ch)
 	}()
 	result, ok := <-ch
