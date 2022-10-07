@@ -105,13 +105,11 @@ yt-dlp http://localhost:8080/{streamername}/{stuff}.m3u8 --concurrent-fragments 
 - https://github.com/yt-dlp/yt-dlp
 - Some `.m3u8` files are much shorter than reported on TwitchTracker.
   It seems that in this case, the `.m3u8` file is ending in
-
   ```
   #EXT-X-DISCONTINUITY
   #EXT-X-TWITCH-DISCONTINUITY
   #EXT-X-ENDLIST
   ```
-
   I was watching another stream, and it ended with a stream warning disconnection.
   So it might happen when the stream goes down but starts up again.
   TwitchTracker reported the stream as a single stream, but the recording consisted of two separate VODs, each with their own video id. `streamscharts.com` seems to be the only website that separates the two VODs.

@@ -1,13 +1,13 @@
 package goVods
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -41,12 +41,40 @@ type VideoData struct {
 	Time         time.Time
 }
 
+type videoPath struct {
+	urlPath   string // e.g. {hash}_{streamername}_{videoid}_{unixtime}
+	videoData *VideoData
+}
+type DomainWithPath struct {
+	domain string // e.g. https://d1m7jfoe9zdc1j.cloudfront.net/
+	path   *videoPath
+}
+
+type DomainWithPaths struct {
+	domain string // e.g. https://d1m7jfoe9zdc1j.cloudfront.net/
+	paths  []*videoPath
+}
+
+type ValidDwpResponse struct {
+	Dwp  *DomainWithPath
+	Body []byte
+}
+
+type dwpResponse struct {
+	validResponse *ValidDwpResponse
+	valid         bool
+}
+
 func (videoData *VideoData) String() string {
 	values := []string{videoData.StreamerName, videoData.Time.Format("2006-01-02_15:04:05"), videoData.VideoId}
 	return strings.Join(values, "_")
 }
 
-func (videoData *VideoData) GetUrlPathUniqueIdentifier() string {
+func (videoData *VideoData) GetVideoPath() *videoPath {
+	return &videoPath{urlPath: videoData.GetUrlPath(), videoData: videoData}
+}
+
+func (videoData *VideoData) GetUrlPath() string {
 	unixTime := videoData.Time.Unix()
 	baseUrl := videoData.StreamerName + "_" + videoData.VideoId + "_" + fmt.Sprint(unixTime)
 	hasher := sha1.New()
@@ -65,92 +93,113 @@ func (videoData *VideoData) WithOffset(seconds int) *VideoData {
 	}
 }
 
-func (videoData *VideoData) GetDpi(domain string) DomainPathIdentifier {
-	pathIdentifier := videoData.GetUrlPathUniqueIdentifier()
-	return DomainPathIdentifier{domain: domain, pathIdentifer: pathIdentifier}
-}
-
-func (videoData *VideoData) GetDpis(domains []string) []DomainPathIdentifier {
-	res := []DomainPathIdentifier{}
-	for _, domain := range domains {
-		res = append(res, videoData.GetDpi(domain))
+func (videoData *VideoData) GetDomainWithPathsList(domains []string, seconds int) []*DomainWithPaths {
+	videoPaths := []*videoPath{}
+	for i := 0; i < seconds; i++ {
+		videoPaths = append(videoPaths, videoData.WithOffset(i).GetVideoPath())
 	}
-	return res
+	domainWithPathsList := []*DomainWithPaths{}
+	for _, domain := range domains {
+		domainWithPathsList = append(domainWithPathsList, &DomainWithPaths{domain: domain, paths: videoPaths})
+	}
+	return domainWithPathsList
 }
 
-type DpiResponse struct {
-	dpi   *DomainPathIdentifier
-	valid bool
+func (domainWithPaths *DomainWithPaths) ToListOfDomainWithPath() []*DomainWithPath {
+	result := []*DomainWithPath{}
+	domain := domainWithPaths.domain
+	for _, path := range domainWithPaths.paths {
+		result = append(result, &DomainWithPath{domain: domain, path: path})
+	}
+	return result
 }
 
-func GetFirstValidDpi(dpis []DomainPathIdentifier) (*DomainPathIdentifier, error) {
-	ch := make(chan *DomainPathIdentifier)
-	responsesCh := make(chan *DpiResponse)
-	for _, dpi := range dpis {
-		go func(dpi DomainPathIdentifier) {
-			resp, err := http.Get(dpi.GetIndexDvrUrl())
-			if err == nil && resp.StatusCode == http.StatusOK {
-				responsesCh <- &DpiResponse{dpi: &dpi, valid: true}
+func (domainWithPaths *DomainWithPaths) GetFirstValidDWP() (*ValidDwpResponse, error) {
+	domainWithPathList := domainWithPaths.ToListOfDomainWithPath()
+	if len(domainWithPathList) < 1 {
+		return nil, errors.New("no urls")
+	}
+	// establish TCP connection for reuse
+	// https://groups.google.com/g/golang-nuts/c/5T5aiDRl_cw/m/zYPGtCOYBwAJ
+	firstDomainWithPath := domainWithPathList[0]
+	body, err := firstDomainWithPath.GetM3U8Body()
+	if err == nil {
+		return &ValidDwpResponse{Dwp: firstDomainWithPath, Body: body}, nil
+	}
+	// reuse with other requests
+	restDomainWithPathList := domainWithPathList[1:]
+	firstValidResponseCh := make(chan *ValidDwpResponse)
+	responsesCh := make(chan *dwpResponse)
+	for _, dwp := range restDomainWithPathList {
+		go func(dwp *DomainWithPath) {
+			body, err := dwp.GetM3U8Body()
+			if err == nil {
+				responsesCh <- &dwpResponse{validResponse: &ValidDwpResponse{Dwp: dwp, Body: body}, valid: true}
 			} else {
-				responsesCh <- &DpiResponse{dpi: &dpi, valid: false}
+				responsesCh <- &dwpResponse{validResponse: nil, valid: false}
 			}
-		}(dpi)
+		}(dwp)
 	}
 	go func() {
-		for range dpis {
-			dpiResponse := <-responsesCh
-			if dpiResponse.valid {
-				ch <- dpiResponse.dpi
+		for range restDomainWithPathList {
+			dwpResponse := <-responsesCh
+			if dwpResponse.valid {
+				firstValidResponseCh <- dwpResponse.validResponse
 				return
 			}
 		}
-		close(ch)
+		close(firstValidResponseCh)
 	}()
-	result, ok := <-ch
+	result, ok := <-firstValidResponseCh
 	if !ok {
 		return nil, errors.New("no valid links were found")
 	}
 	return result, nil
 }
 
-type DomainPathIdentifier struct {
-	domain        string // e.g. https://d1m7jfoe9zdc1j.cloudfront.net/
-	pathIdentifer string // e.g. {hash}_{streamername}_{videoid}_{unixtime}
-}
-
-func (d *DomainPathIdentifier) ToVideoData() (*VideoData, error) {
-	allUnderscoreIndices := []int{}
-	for i := 0; i < len(d.pathIdentifer); i++ {
-		char := d.pathIdentifer[i]
-		if char == '_' {
-			allUnderscoreIndices = append(allUnderscoreIndices, i)
+func GetFirstValidDwp(domainWithPathsList []*DomainWithPaths) (*ValidDwpResponse, error) {
+	firstValidResponseCh := make(chan *ValidDwpResponse)
+	responsesCh := make(chan *dwpResponse)
+	for _, domainWithPaths := range domainWithPathsList {
+		go func(domainWithPaths *DomainWithPaths) {
+			validDwpResponse, err := domainWithPaths.GetFirstValidDWP()
+			if err == nil {
+				responsesCh <- &dwpResponse{validResponse: validDwpResponse, valid: true}
+			} else {
+				responsesCh <- &dwpResponse{validResponse: nil, valid: false}
+			}
+		}(domainWithPaths)
+	}
+	go func() {
+		for range domainWithPathsList {
+			response := <-responsesCh
+			if response.valid {
+				firstValidResponseCh <- response.validResponse
+				return
+			}
 		}
+		close(firstValidResponseCh)
+	}()
+	result, ok := <-firstValidResponseCh
+	if !ok {
+		return nil, errors.New("no valid links were found")
 	}
-	numUnderscores := len(allUnderscoreIndices)
-	if numUnderscores < 3 {
-		return nil, errors.New("the pathIdentifer doesn't have enough enough underscores")
-	}
-	underscoreIndices := [3]int{allUnderscoreIndices[0], allUnderscoreIndices[numUnderscores-2], allUnderscoreIndices[numUnderscores-1]}
-	streamerName := d.pathIdentifer[underscoreIndices[0]+1 : underscoreIndices[1]]
-	videoid := d.pathIdentifer[underscoreIndices[1]+1 : underscoreIndices[2]]
-	unixtimeString := d.pathIdentifer[underscoreIndices[2]+1:]
-	unixtimeInt, err := strconv.ParseInt(unixtimeString, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-	videoTime := time.Unix(unixtimeInt, 0)
-	return &VideoData{StreamerName: streamerName, VideoId: videoid, Time: videoTime}, nil
+	return result, nil
 }
 
-func (d *DomainPathIdentifier) GetIndexDvrUrl() string {
-	return d.domain + d.pathIdentifer + "/chunked/index-dvr.m3u8"
+func (d *DomainWithPath) GetVideoData() *VideoData {
+	return d.path.videoData
 }
 
-func (d *DomainPathIdentifier) GetSegmentChunkedUrl(segment *m3u8.MediaSegment) string {
-	return d.domain + d.pathIdentifer + "/chunked/" + segment.URI
+func (d *DomainWithPath) GetIndexDvrUrl() string {
+	return d.domain + d.path.urlPath + "/chunked/index-dvr.m3u8"
 }
 
-func (d *DomainPathIdentifier) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *m3u8.MediaPlaylist {
+func (d *DomainWithPath) GetSegmentChunkedUrl(segment *m3u8.MediaSegment) string {
+	return d.domain + d.path.urlPath + "/chunked/" + segment.URI
+}
+
+func (d *DomainWithPath) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *m3u8.MediaPlaylist {
 	for _, segment := range playlist.Segments {
 		if segment == nil {
 			continue
@@ -160,8 +209,20 @@ func (d *DomainPathIdentifier) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *
 	return playlist
 }
 
-func DecodeMediaPlaylist(reader io.Reader, strict bool) (*m3u8.MediaPlaylist, error) {
-	p, listType, err := m3u8.DecodeFrom(reader, strict)
+func (d *DomainWithPath) GetM3U8Body() ([]byte, error) {
+	resp, err := http.Get(d.GetIndexDvrUrl())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, errors.New(fmt.Sprint("status code is ", resp.StatusCode))
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func DecodeMediaPlaylist(data []byte, strict bool) (*m3u8.MediaPlaylist, error) {
+	p, listType, err := m3u8.Decode(*bytes.NewBuffer(data), strict)
 	if err != nil {
 		return nil, err
 	}
@@ -187,14 +248,6 @@ func MuteMediaSegments(playlist *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
 		segment.URI = getNewURI(segment.URI)
 	})
 	return nonnilSegments
-}
-
-func FetchMediaPlaylist(url string) (*m3u8.MediaPlaylist, error) {
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	return DecodeMediaPlaylist(res.Body, true)
 }
 
 func GetMediaPlaylistDuration(mediapl *m3u8.MediaPlaylist) time.Duration {

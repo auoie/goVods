@@ -12,23 +12,20 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func mainHelper(dpis []goVods.DomainPathIdentifier, ctx *cli.Context) error {
+func mainHelper(domainWithPathsList []*goVods.DomainWithPaths, ctx *cli.Context) error {
 	write := ctx.Bool("write")
-	dpi, err := goVods.GetFirstValidDpi(dpis)
+	dpi, err := goVods.GetFirstValidDwp(domainWithPathsList)
 	if err != nil {
 		return err
 	}
-	mediapl, err := goVods.FetchMediaPlaylist(dpi.GetIndexDvrUrl())
+	mediapl, err := goVods.DecodeMediaPlaylist(dpi.Body, true)
 	if err != nil {
 		return err
 	}
 	goVods.MuteMediaSegments(mediapl)
-	dpi.MakePathsExplicit(mediapl)
+	dpi.Dwp.MakePathsExplicit(mediapl)
 	if write {
-		videoData, err := dpi.ToVideoData()
-		if err != nil {
-			return err
-		}
+		videoData := dpi.Dwp.GetVideoData()
 		directoryPath := filepath.Join("Downloads", videoData.StreamerName)
 		if err := os.MkdirAll(directoryPath, os.ModePerm); err != nil {
 			return err
@@ -86,8 +83,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					dpis := videoData.GetDpis(goVods.DOMAINS)
-					return mainHelper(dpis, ctx)
+					return mainHelper(videoData.GetDomainWithPathsList(goVods.DOMAINS, 1), ctx)
 				},
 			},
 			{
@@ -123,11 +119,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					dpis := []goVods.DomainPathIdentifier{}
-					for i := 0; i < 60; i++ {
-						dpis = append(dpis, videoData.WithOffset(i).GetDpis(goVods.DOMAINS)...)
-					}
-					return mainHelper(dpis, ctx)
+					return mainHelper(videoData.GetDomainWithPathsList(goVods.DOMAINS, 60), ctx)
 				},
 			},
 			{
@@ -163,8 +155,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					dpis := videoData.GetDpis(goVods.DOMAINS)
-					return mainHelper(dpis, ctx)
+					return mainHelper(videoData.GetDomainWithPathsList(goVods.DOMAINS, 1), ctx)
 				},
 			},
 		},
