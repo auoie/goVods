@@ -1,0 +1,47 @@
+query GetUserId($login: String!) {
+  user(login: $login) {
+    id
+  }
+}
+
+# first must be between 1 and 30.
+# cursor is not included in the result.
+query GetStreams($first: Int!, $cursor: Cursor!) {
+  streams(first: $first, after: $cursor) {
+    generationID
+    pageInfo {
+      hasNextPage
+    }
+    responseID
+    edges {
+      node {
+        id
+        archiveVideo {
+          owner {
+            login
+            displayName
+          }
+          game {
+            name
+          }
+          title
+        }
+        viewersCount
+        createdAt
+      }
+      cursor
+    }
+  }
+}
+
+query GetUserStream($login: String!) {
+  user(login: $login) {
+    stream {
+      viewersCount
+      id
+      game {
+        name
+      }
+    }
+  }
+}

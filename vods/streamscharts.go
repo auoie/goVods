@@ -1,19 +1,19 @@
-package goVods
+package vods
 
 import (
 	"time"
 )
 
-type TwitchTrackerData struct {
+type StreamsChartsData struct {
 	StreamerName string
 	VideoId      string
 	UtcTime      string
 }
 
-func (data *TwitchTrackerData) GetVideoData() (VideoData, error) {
-	time, err := time.Parse("2006-01-02 15:04:05", data.UtcTime)
+func (data *StreamsChartsData) GetVideoData() (VideoData, error) {
+	time, err := time.Parse("02-01-2006 15:04", data.UtcTime)
 	if err != nil {
-		return VideoData{}, err
+		return VideoData{}, nil
 	}
 	return VideoData{
 		StreamerName: data.StreamerName,
