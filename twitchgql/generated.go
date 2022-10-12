@@ -76,8 +76,8 @@ func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdge) GetCursor() string { 
 type GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream struct {
 	// The stream's unique identifier.
 	Id string `json:"id"`
-	// The associated archive of the stream.
-	ArchiveVideo GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo `json:"archiveVideo"`
+	// The user who is broadcasting the live stream.
+	Broadcaster GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser `json:"broadcaster"`
 	// The number of viewers currently watching the stream.
 	ViewersCount int `json:"viewersCount"`
 	// The time streaming started.
@@ -87,9 +87,9 @@ type GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream struct {
 // GetId returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream.Id, and is useful for accessing the field via an interface.
 func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream) GetId() string { return v.Id }
 
-// GetArchiveVideo returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream.ArchiveVideo, and is useful for accessing the field via an interface.
-func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream) GetArchiveVideo() GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo {
-	return v.ArchiveVideo
+// GetBroadcaster returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream.Broadcaster, and is useful for accessing the field via an interface.
+func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream) GetBroadcaster() GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser {
+	return v.Broadcaster
 }
 
 // GetViewersCount returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream.ViewersCount, and is useful for accessing the field via an interface.
@@ -102,67 +102,25 @@ func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStream) GetCreatedA
 	return v.CreatedAt
 }
 
-// GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo includes the requested fields of the GraphQL type Video.
-type GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo struct {
-	// The owner of the video.
-	Owner GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser `json:"owner"`
-	// The game the video is depicting.
-	Game GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoGame `json:"game"`
-	// The title of the video.
-	Title string `json:"title"`
-}
-
-// GetOwner returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo.Owner, and is useful for accessing the field via an interface.
-func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo) GetOwner() GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser {
-	return v.Owner
-}
-
-// GetGame returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo.Game, and is useful for accessing the field via an interface.
-func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo) GetGame() GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoGame {
-	return v.Game
-}
-
-// GetTitle returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo.Title, and is useful for accessing the field via an interface.
-func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideo) GetTitle() string {
-	return v.Title
-}
-
-// GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoGame includes the requested fields of the GraphQL type Game.
-// The GraphQL type's documentation follows.
-//
-// A Game is often the subject of a Stream on Twitch.
-type GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoGame struct {
-	// The name of the game. This string is untranslated.
-	// This field should only be used in limited occassions, like tracking and URLs.
-	// You should use displayName for all all game names shown to the users.
-	Name string `json:"name"`
-}
-
-// GetName returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoGame.Name, and is useful for accessing the field via an interface.
-func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoGame) GetName() string {
-	return v.Name
-}
-
-// GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser includes the requested fields of the GraphQL type User.
+// GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser includes the requested fields of the GraphQL type User.
 // The GraphQL type's documentation follows.
 //
 // Twitch user.
-type GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser struct {
+type GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser struct {
+	// The user's unique identifier.
+	Id string `json:"id"`
 	// The user's standard alphanumeric Twitch name.
 	Login string `json:"login"`
-	// A user-styled version of their login.
-	// For international users, this could be the user's login with localized characters.
-	DisplayName string `json:"displayName"`
 }
 
-// GetLogin returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser.Login, and is useful for accessing the field via an interface.
-func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser) GetLogin() string {
+// GetId returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser.Id, and is useful for accessing the field via an interface.
+func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser) GetId() string {
+	return v.Id
+}
+
+// GetLogin returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser.Login, and is useful for accessing the field via an interface.
+func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamBroadcasterUser) GetLogin() string {
 	return v.Login
-}
-
-// GetDisplayName returns GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser.DisplayName, and is useful for accessing the field via an interface.
-func (v *GetStreamsStreamsStreamConnectionEdgesStreamEdgeNodeStreamArchiveVideoOwnerUser) GetDisplayName() string {
-	return v.DisplayName
 }
 
 // GetStreamsStreamsStreamConnectionPageInfo includes the requested fields of the GraphQL type PageInfo.
@@ -181,90 +139,69 @@ type GetStreamsStreamsStreamConnectionPageInfo struct {
 // GetHasNextPage returns GetStreamsStreamsStreamConnectionPageInfo.HasNextPage, and is useful for accessing the field via an interface.
 func (v *GetStreamsStreamsStreamConnectionPageInfo) GetHasNextPage() bool { return v.HasNextPage }
 
-// GetUserIdResponse is returned by GetUserId on success.
-type GetUserIdResponse struct {
+// GetUserModsResponse is returned by GetUserMods on success.
+type GetUserModsResponse struct {
 	// Get a user by their ID or login.
 	// If no ID or login is provided, null is returned.
 	// Lookup type can tell the resolver to include all users (inclusing deleted and
 	// suspended accounts) on the lookup, defaults to only retrieve active users.
-	User GetUserIdUser `json:"user"`
+	User GetUserModsUser `json:"user"`
 }
 
-// GetUser returns GetUserIdResponse.User, and is useful for accessing the field via an interface.
-func (v *GetUserIdResponse) GetUser() GetUserIdUser { return v.User }
+// GetUser returns GetUserModsResponse.User, and is useful for accessing the field via an interface.
+func (v *GetUserModsResponse) GetUser() GetUserModsUser { return v.User }
 
-// GetUserIdUser includes the requested fields of the GraphQL type User.
+// GetUserModsUser includes the requested fields of the GraphQL type User.
 // The GraphQL type's documentation follows.
 //
 // Twitch user.
-type GetUserIdUser struct {
-	// The user's unique identifier.
-	Id string `json:"id"`
+type GetUserModsUser struct {
+	// Returns a paginated list of channel moderators.
+	Mods GetUserModsUserModsModConnection `json:"mods"`
 }
 
-// GetId returns GetUserIdUser.Id, and is useful for accessing the field via an interface.
-func (v *GetUserIdUser) GetId() string { return v.Id }
+// GetMods returns GetUserModsUser.Mods, and is useful for accessing the field via an interface.
+func (v *GetUserModsUser) GetMods() GetUserModsUserModsModConnection { return v.Mods }
 
-// GetUserStreamResponse is returned by GetUserStream on success.
-type GetUserStreamResponse struct {
-	// Get a user by their ID or login.
-	// If no ID or login is provided, null is returned.
-	// Lookup type can tell the resolver to include all users (inclusing deleted and
-	// suspended accounts) on the lookup, defaults to only retrieve active users.
-	User GetUserStreamUser `json:"user"`
+// GetUserModsUserModsModConnection includes the requested fields of the GraphQL type ModConnection.
+// The GraphQL type's documentation follows.
+//
+// Paginated list of moderators of a channel.
+type GetUserModsUserModsModConnection struct {
+	// The elements of the list.
+	Edges []GetUserModsUserModsModConnectionEdgesModEdge `json:"edges"`
 }
 
-// GetUser returns GetUserStreamResponse.User, and is useful for accessing the field via an interface.
-func (v *GetUserStreamResponse) GetUser() GetUserStreamUser { return v.User }
+// GetEdges returns GetUserModsUserModsModConnection.Edges, and is useful for accessing the field via an interface.
+func (v *GetUserModsUserModsModConnection) GetEdges() []GetUserModsUserModsModConnectionEdgesModEdge {
+	return v.Edges
+}
 
-// GetUserStreamUser includes the requested fields of the GraphQL type User.
+// GetUserModsUserModsModConnectionEdgesModEdge includes the requested fields of the GraphQL type ModEdge.
+// The GraphQL type's documentation follows.
+//
+// Element in a list of moderators of a channel.
+type GetUserModsUserModsModConnectionEdgesModEdge struct {
+	// The user that is a moderator.
+	Node GetUserModsUserModsModConnectionEdgesModEdgeNodeUser `json:"node"`
+}
+
+// GetNode returns GetUserModsUserModsModConnectionEdgesModEdge.Node, and is useful for accessing the field via an interface.
+func (v *GetUserModsUserModsModConnectionEdgesModEdge) GetNode() GetUserModsUserModsModConnectionEdgesModEdgeNodeUser {
+	return v.Node
+}
+
+// GetUserModsUserModsModConnectionEdgesModEdgeNodeUser includes the requested fields of the GraphQL type User.
 // The GraphQL type's documentation follows.
 //
 // Twitch user.
-type GetUserStreamUser struct {
-	// The user's live stream.
-	// Null if the user is not currently broadcasting.
-	Stream GetUserStreamUserStream `json:"stream"`
+type GetUserModsUserModsModConnectionEdgesModEdgeNodeUser struct {
+	// The user's standard alphanumeric Twitch name.
+	Login string `json:"login"`
 }
 
-// GetStream returns GetUserStreamUser.Stream, and is useful for accessing the field via an interface.
-func (v *GetUserStreamUser) GetStream() GetUserStreamUserStream { return v.Stream }
-
-// GetUserStreamUserStream includes the requested fields of the GraphQL type Stream.
-// The GraphQL type's documentation follows.
-//
-// A live stream.
-type GetUserStreamUserStream struct {
-	// The number of viewers currently watching the stream.
-	ViewersCount int `json:"viewersCount"`
-	// The stream's unique identifier.
-	Id string `json:"id"`
-	// Information about the game being streamed.
-	Game GetUserStreamUserStreamGame `json:"game"`
-}
-
-// GetViewersCount returns GetUserStreamUserStream.ViewersCount, and is useful for accessing the field via an interface.
-func (v *GetUserStreamUserStream) GetViewersCount() int { return v.ViewersCount }
-
-// GetId returns GetUserStreamUserStream.Id, and is useful for accessing the field via an interface.
-func (v *GetUserStreamUserStream) GetId() string { return v.Id }
-
-// GetGame returns GetUserStreamUserStream.Game, and is useful for accessing the field via an interface.
-func (v *GetUserStreamUserStream) GetGame() GetUserStreamUserStreamGame { return v.Game }
-
-// GetUserStreamUserStreamGame includes the requested fields of the GraphQL type Game.
-// The GraphQL type's documentation follows.
-//
-// A Game is often the subject of a Stream on Twitch.
-type GetUserStreamUserStreamGame struct {
-	// The name of the game. This string is untranslated.
-	// This field should only be used in limited occassions, like tracking and URLs.
-	// You should use displayName for all all game names shown to the users.
-	Name string `json:"name"`
-}
-
-// GetName returns GetUserStreamUserStreamGame.Name, and is useful for accessing the field via an interface.
-func (v *GetUserStreamUserStreamGame) GetName() string { return v.Name }
+// GetLogin returns GetUserModsUserModsModConnectionEdgesModEdgeNodeUser.Login, and is useful for accessing the field via an interface.
+func (v *GetUserModsUserModsModConnectionEdgesModEdgeNodeUser) GetLogin() string { return v.Login }
 
 // __GetStreamsInput is used internally by genqlient
 type __GetStreamsInput struct {
@@ -278,21 +215,13 @@ func (v *__GetStreamsInput) GetFirst() int { return v.First }
 // GetCursor returns __GetStreamsInput.Cursor, and is useful for accessing the field via an interface.
 func (v *__GetStreamsInput) GetCursor() string { return v.Cursor }
 
-// __GetUserIdInput is used internally by genqlient
-type __GetUserIdInput struct {
+// __GetUserModsInput is used internally by genqlient
+type __GetUserModsInput struct {
 	Login string `json:"login"`
 }
 
-// GetLogin returns __GetUserIdInput.Login, and is useful for accessing the field via an interface.
-func (v *__GetUserIdInput) GetLogin() string { return v.Login }
-
-// __GetUserStreamInput is used internally by genqlient
-type __GetUserStreamInput struct {
-	Login string `json:"login"`
-}
-
-// GetLogin returns __GetUserStreamInput.Login, and is useful for accessing the field via an interface.
-func (v *__GetUserStreamInput) GetLogin() string { return v.Login }
+// GetLogin returns __GetUserModsInput.Login, and is useful for accessing the field via an interface.
+func (v *__GetUserModsInput) GetLogin() string { return v.Login }
 
 // first must be between 1 and 30.
 // cursor is not included in the result.
@@ -315,15 +244,9 @@ query GetStreams ($first: Int!, $cursor: Cursor!) {
 		edges {
 			node {
 				id
-				archiveVideo {
-					owner {
-						login
-						displayName
-					}
-					game {
-						name
-					}
-					title
+				broadcaster {
+					id
+					login
 				}
 				viewersCount
 				createdAt
@@ -352,65 +275,33 @@ query GetStreams ($first: Int!, $cursor: Cursor!) {
 	return &data, err
 }
 
-func GetUserId(
+func GetUserMods(
 	ctx context.Context,
 	client graphql.Client,
 	login string,
-) (*GetUserIdResponse, error) {
+) (*GetUserModsResponse, error) {
 	req := &graphql.Request{
-		OpName: "GetUserId",
+		OpName: "GetUserMods",
 		Query: `
-query GetUserId ($login: String!) {
+query GetUserMods ($login: String!) {
 	user(login: $login) {
-		id
-	}
-}
-`,
-		Variables: &__GetUserIdInput{
-			Login: login,
-		},
-	}
-	var err error
-
-	var data GetUserIdResponse
-	resp := &graphql.Response{Data: &data}
-
-	err = client.MakeRequest(
-		ctx,
-		req,
-		resp,
-	)
-
-	return &data, err
-}
-
-func GetUserStream(
-	ctx context.Context,
-	client graphql.Client,
-	login string,
-) (*GetUserStreamResponse, error) {
-	req := &graphql.Request{
-		OpName: "GetUserStream",
-		Query: `
-query GetUserStream ($login: String!) {
-	user(login: $login) {
-		stream {
-			viewersCount
-			id
-			game {
-				name
+		mods {
+			edges {
+				node {
+					login
+				}
 			}
 		}
 	}
 }
 `,
-		Variables: &__GetUserStreamInput{
+		Variables: &__GetUserModsInput{
 			Login: login,
 		},
 	}
 	var err error
 
-	var data GetUserStreamResponse
+	var data GetUserModsResponse
 	resp := &graphql.Response{Data: &data}
 
 	err = client.MakeRequest(

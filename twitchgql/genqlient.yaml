@@ -2,10 +2,11 @@
 # https://github.com/Khan/genqlient/blob/main/docs/genqlient.yaml
 schema: schema.graphql
 operations:
-- genqlient.graphql
+  - genqlient.graphql
 generated: generated.go
 bindings:
   Time:
     type: time.Time
   Cursor:
     type: string
+optional: value

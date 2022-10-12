@@ -1,9 +1,3 @@
-query GetUserId($login: String!) {
-  user(login: $login) {
-    id
-  }
-}
-
 # first must be between 1 and 30.
 # cursor is not included in the result.
 query GetStreams($first: Int!, $cursor: Cursor!) {
@@ -16,15 +10,9 @@ query GetStreams($first: Int!, $cursor: Cursor!) {
     edges {
       node {
         id
-        archiveVideo {
-          owner {
-            login
-            displayName
-          }
-          game {
-            name
-          }
-          title
+        broadcaster {
+          id
+          login
         }
         viewersCount
         createdAt
@@ -34,13 +22,13 @@ query GetStreams($first: Int!, $cursor: Cursor!) {
   }
 }
 
-query GetUserStream($login: String!) {
+query GetUserMods($login: String!) {
   user(login: $login) {
-    stream {
-      viewersCount
-      id
-      game {
-        name
+    mods {
+      edges {
+        node {
+          login
+        }
       }
     }
   }
