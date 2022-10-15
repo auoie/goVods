@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/auoie/goVods"
+	goVods "github.com/auoie/goVods/vods"
 	"github.com/urfave/cli/v2"
 )
 

@@ -1,15 +1,17 @@
-package goVods
+package vods
 
-import "time"
+import (
+	"time"
+)
 
-type SullyGnomeData struct {
+type TwitchTrackerData struct {
 	StreamerName string
 	VideoId      string
 	UtcTime      string
 }
 
-func (data *SullyGnomeData) GetVideoData() (VideoData, error) {
-	time, err := time.Parse("2006-01-02T15:04:05Z", data.UtcTime)
+func (data *TwitchTrackerData) GetVideoData() (VideoData, error) {
+	time, err := time.Parse("2006-01-02 15:04:05", data.UtcTime)
 	if err != nil {
 		return VideoData{}, err
 	}

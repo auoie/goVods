@@ -1,4 +1,4 @@
-package goVods
+package vods
 
 import (
 	"bytes"
