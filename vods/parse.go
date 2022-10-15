@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/grafov/m3u8"
-	"github.com/samber/lo"
 )
 
 var DOMAINS = []string{
@@ -232,21 +231,23 @@ func DecodeMediaPlaylist(data []byte, strict bool) (*m3u8.MediaPlaylist, error) 
 	return p.(*m3u8.MediaPlaylist), nil
 }
 
+func getMutedURI(segmentUri string) string {
+	if strings.Contains(segmentUri, "unmuted") {
+		start := strings.Index(segmentUri, "-")
+		front := segmentUri[0:start]
+		return front + "-muted.ts"
+	}
+	return segmentUri
+}
+
 func MuteMediaSegments(playlist *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
-	nonnilSegments := lo.Filter(playlist.Segments, func(segment *m3u8.MediaSegment, index int) bool {
-		return segment != nil
-	})
-	lo.ForEach(nonnilSegments, func(segment *m3u8.MediaSegment, index int) {
-		getNewURI := func(val string) string {
-			if strings.Contains(val, "unmuted") {
-				start := strings.Index(val, "-")
-				front := val[0:start]
-				return front + "-muted.ts"
-			}
-			return val
+	nonnilSegments := []*m3u8.MediaSegment{}
+	for _, segment := range playlist.Segments {
+		if segment != nil {
+			segment.URI = getMutedURI(segment.URI)
+			nonnilSegments = append(nonnilSegments, segment)
 		}
-		segment.URI = getNewURI(segment.URI)
-	})
+	}
 	return nonnilSegments
 }
 
