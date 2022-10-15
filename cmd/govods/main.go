@@ -8,21 +8,21 @@ import (
 	"path/filepath"
 	"time"
 
-	goVods "github.com/auoie/goVods/vods"
+	"github.com/auoie/goVods/vods"
 	"github.com/urfave/cli/v2"
 )
 
-func mainHelper(domainWithPathsList []*goVods.DomainWithPaths, ctx *cli.Context) error {
+func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) error {
 	write := ctx.Bool("write")
-	dpi, err := goVods.GetFirstValidDwp(domainWithPathsList)
+	dpi, err := vods.GetFirstValidDwp(domainWithPathsList)
 	if err != nil {
 		return err
 	}
-	mediapl, err := goVods.DecodeMediaPlaylist(dpi.Body, true)
+	mediapl, err := vods.DecodeMediaPlaylist(dpi.Body, true)
 	if err != nil {
 		return err
 	}
-	goVods.MuteMediaSegments(mediapl)
+	vods.MuteMediaSegments(mediapl)
 	dpi.Dwp.MakePathsExplicit(mediapl)
 	if write {
 		videoData := dpi.Dwp.GetVideoData()
@@ -30,7 +30,7 @@ func mainHelper(domainWithPathsList []*goVods.DomainWithPaths, ctx *cli.Context)
 		if err := os.MkdirAll(directoryPath, os.ModePerm); err != nil {
 			return err
 		}
-		roundedDuration := goVods.GetMediaPlaylistDuration(mediapl).Truncate(time.Second)
+		roundedDuration := vods.GetMediaPlaylistDuration(mediapl).Truncate(time.Second)
 		filePath := filepath.Join(directoryPath, fmt.Sprint(videoData, "_", roundedDuration, ".m3u8"))
 		out, err := os.Create(filePath)
 		if err != nil {
@@ -78,12 +78,12 @@ func main() {
 					streamer := ctx.String("streamer")
 					videoid := ctx.String("videoid")
 					time := ctx.String("time")
-					twitchData := goVods.TwitchTrackerData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
+					twitchData := vods.TwitchTrackerData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
 					videoData, err := twitchData.GetVideoData()
 					if err != nil {
 						return err
 					}
-					return mainHelper(videoData.GetDomainWithPathsList(goVods.DOMAINS, 1), ctx)
+					return mainHelper(videoData.GetDomainWithPathsList(vods.DOMAINS, 1), ctx)
 				},
 			},
 			{
@@ -114,12 +114,12 @@ func main() {
 					streamer := ctx.String("streamer")
 					videoid := ctx.String("videoid")
 					time := ctx.String("time")
-					scData := goVods.StreamsChartsData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
+					scData := vods.StreamsChartsData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
 					videoData, err := scData.GetVideoData()
 					if err != nil {
 						return err
 					}
-					return mainHelper(videoData.GetDomainWithPathsList(goVods.DOMAINS, 60), ctx)
+					return mainHelper(videoData.GetDomainWithPathsList(vods.DOMAINS, 60), ctx)
 				},
 			},
 			{
@@ -150,12 +150,12 @@ func main() {
 					streamer := ctx.String("streamer")
 					videoid := ctx.String("videoid")
 					time := ctx.String("time")
-					sullygnomeData := goVods.SullyGnomeData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
+					sullygnomeData := vods.SullyGnomeData{StreamerName: streamer, VideoId: videoid, UtcTime: time}
 					videoData, err := sullygnomeData.GetVideoData()
 					if err != nil {
 						return err
 					}
-					return mainHelper(videoData.GetDomainWithPathsList(goVods.DOMAINS, 1), ctx)
+					return mainHelper(videoData.GetDomainWithPathsList(vods.DOMAINS, 1), ctx)
 				},
 			},
 		},

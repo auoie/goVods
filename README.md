@@ -11,7 +11,7 @@ Build the binary.
 If you don't want to build it, then just use `go run ./cmd/govods.go {stuff}`.
 
 ```bash
-go build ./cmd/govods.go # Make the binary
+go build ./cmd/govods # Make the binary
 ./govods --help # View help
 ./govods sg-manual-get-m3u8 --help # View help for command sg-manual-get-m3u8
 ```
