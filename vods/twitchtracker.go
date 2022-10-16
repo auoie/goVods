@@ -1,8 +1,6 @@
 package vods
 
-import (
-	"time"
-)
+import "time"
 
 type TwitchTrackerData struct {
 	StreamerName string

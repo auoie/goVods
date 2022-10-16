@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,42 +11,56 @@ import (
 	"time"
 
 	"github.com/auoie/goVods/vods"
+	"github.com/grafov/m3u8"
 	"github.com/urfave/cli/v2"
 )
 
-func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) error {
-	write := ctx.Bool("write")
-	dpi, err := vods.GetFirstValidDwp(domainWithPathsList)
+func writeMediaPlaylist(mediapl *m3u8.MediaPlaylist, dpi *vods.ValidDwpResponse) error {
+	videoData := dpi.Dwp.GetVideoData()
+	directoryPath := filepath.Join("Downloads", videoData.StreamerName)
+	if err := os.MkdirAll(directoryPath, os.ModePerm); err != nil {
+		return err
+	}
+	roundedDuration := vods.GetMediaPlaylistDuration(mediapl).Truncate(time.Second)
+	filePath := filepath.Join(directoryPath, fmt.Sprint(videoData, "_", roundedDuration, ".m3u8"))
+	out, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
-	mediapl, err := vods.DecodeMediaPlaylist(dpi.Body, true)
+	defer out.Close()
+	_, err = io.Copy(out, mediapl.Encode())
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) error {
+	dpi, err := vods.GetFirstValidDwp(context.Background(), domainWithPathsList)
+	fmt.Println(fmt.Sprint("Found valid url ", dpi.Dwp.GetIndexDvrUrl()))
+	if err != nil {
+		return err
+	}
+	mediapl, err := vods.DecodeMediaPlaylistFilterNilSegments(dpi.Body, true)
 	if err != nil {
 		return err
 	}
 	vods.MuteMediaSegments(mediapl)
 	dpi.Dwp.MakePathsExplicit(mediapl)
-	if write {
-		videoData := dpi.Dwp.GetVideoData()
-		directoryPath := filepath.Join("Downloads", videoData.StreamerName)
-		if err := os.MkdirAll(directoryPath, os.ModePerm); err != nil {
-			return err
-		}
-		roundedDuration := vods.GetMediaPlaylistDuration(mediapl).Truncate(time.Second)
-		filePath := filepath.Join(directoryPath, fmt.Sprint(videoData, "_", roundedDuration, ".m3u8"))
-		out, err := os.Create(filePath)
+	checkInvalid := ctx.Bool("check-invalid")
+	if checkInvalid {
+		numTotalSegments := len(mediapl.Segments)
+		mediapl, err = vods.GetMediaPlaylistWithValidSegments(mediapl)
 		if err != nil {
 			return err
 		}
-		defer out.Close()
-		_, err = io.Copy(out, mediapl.Encode())
-		if err != nil {
-			return err
+		numValidSegments := len(mediapl.Segments)
+		fmt.Println(fmt.Sprint(numValidSegments, " valid segments out of ", numTotalSegments))
+		if numValidSegments == 0 {
+			return errors.New("0 valid segments found")
 		}
-	} else {
-		fmt.Println(mediapl.String())
 	}
-	return nil
+	return writeMediaPlaylist(mediapl, dpi)
 }
 
 func main() {
@@ -70,8 +86,8 @@ func main() {
 						Required: true,
 					},
 					&cli.BoolFlag{
-						Name:  "write",
-						Usage: "Rather than printing the file, write the .m3u8 file to the folder ./Downloads/.",
+						Name:  "check-invalid",
+						Usage: "Filter out all of the invalid segments in the m3u8 file",
 					},
 				},
 				Action: func(ctx *cli.Context) error {
@@ -106,8 +122,8 @@ func main() {
 						Required: true,
 					},
 					&cli.BoolFlag{
-						Name:  "write",
-						Usage: "Rather than printing the file, write the .m3u8 file to the folder ./Downloads/.",
+						Name:  "check-invalid",
+						Usage: "Filter out all of the invalid segments in the m3u8 file",
 					},
 				},
 				Action: func(ctx *cli.Context) error {
@@ -142,8 +158,8 @@ func main() {
 						Required: true,
 					},
 					&cli.BoolFlag{
-						Name:  "write",
-						Usage: "Rather than printing the file, write the .m3u8 file to the folder ./Downloads/.",
+						Name:  "check-invalid",
+						Usage: "Filter out all of the invalid segments in the m3u8 file",
 					},
 				},
 				Action: func(ctx *cli.Context) error {

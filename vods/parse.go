@@ -2,12 +2,14 @@ package vods
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -64,6 +66,11 @@ type dwpResponse struct {
 	valid         bool
 }
 
+type urlIndexResponse struct {
+	index int
+	valid bool
+}
+
 func (videoData *VideoData) String() string {
 	values := []string{videoData.StreamerName, videoData.Time.Format("2006-01-02_15:04:05"), videoData.VideoId}
 	return strings.Join(values, "_")
@@ -113,7 +120,7 @@ func (domainWithPaths *DomainWithPaths) ToListOfDomainWithPath() []*DomainWithPa
 	return result
 }
 
-func (domainWithPaths *DomainWithPaths) GetFirstValidDWP() (*ValidDwpResponse, error) {
+func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context) (*ValidDwpResponse, error) {
 	domainWithPathList := domainWithPaths.ToListOfDomainWithPath()
 	if len(domainWithPathList) < 1 {
 		return nil, errors.New("no urls")
@@ -121,7 +128,7 @@ func (domainWithPaths *DomainWithPaths) GetFirstValidDWP() (*ValidDwpResponse, e
 	// establish TCP connection for reuse
 	// https://groups.google.com/g/golang-nuts/c/5T5aiDRl_cw/m/zYPGtCOYBwAJ
 	firstDomainWithPath := domainWithPathList[0]
-	body, err := firstDomainWithPath.GetM3U8Body()
+	body, err := firstDomainWithPath.GetM3U8Body(ctx)
 	if err == nil {
 		return &ValidDwpResponse{Dwp: firstDomainWithPath, Body: body}, nil
 	}
@@ -131,7 +138,7 @@ func (domainWithPaths *DomainWithPaths) GetFirstValidDWP() (*ValidDwpResponse, e
 	responsesCh := make(chan *dwpResponse)
 	for _, dwp := range restDomainWithPathList {
 		go func(dwp *DomainWithPath) {
-			body, err := dwp.GetM3U8Body()
+			body, err := dwp.GetM3U8Body(ctx)
 			if err == nil {
 				responsesCh <- &dwpResponse{validResponse: &ValidDwpResponse{Dwp: dwp, Body: body}, valid: true}
 			} else {
@@ -140,11 +147,12 @@ func (domainWithPaths *DomainWithPaths) GetFirstValidDWP() (*ValidDwpResponse, e
 		}(dwp)
 	}
 	go func() {
+		foundValid := false
 		for range restDomainWithPathList {
 			dwpResponse := <-responsesCh
-			if dwpResponse.valid {
+			if dwpResponse.valid && !foundValid {
 				firstValidResponseCh <- dwpResponse.validResponse
-				return
+				foundValid = true
 			}
 		}
 		close(firstValidResponseCh)
@@ -156,12 +164,13 @@ func (domainWithPaths *DomainWithPaths) GetFirstValidDWP() (*ValidDwpResponse, e
 	return result, nil
 }
 
-func GetFirstValidDwp(domainWithPathsList []*DomainWithPaths) (*ValidDwpResponse, error) {
+func GetFirstValidDwp(ctx context.Context, domainWithPathsList []*DomainWithPaths) (*ValidDwpResponse, error) {
 	firstValidResponseCh := make(chan *ValidDwpResponse)
 	responsesCh := make(chan *dwpResponse)
+	ctx, cancel := context.WithCancel(ctx)
 	for _, domainWithPaths := range domainWithPathsList {
 		go func(domainWithPaths *DomainWithPaths) {
-			validDwpResponse, err := domainWithPaths.GetFirstValidDWP()
+			validDwpResponse, err := domainWithPaths.GetFirstValidDWP(ctx)
 			if err == nil {
 				responsesCh <- &dwpResponse{validResponse: validDwpResponse, valid: true}
 			} else {
@@ -170,16 +179,18 @@ func GetFirstValidDwp(domainWithPathsList []*DomainWithPaths) (*ValidDwpResponse
 		}(domainWithPaths)
 	}
 	go func() {
+		foundValid := false
 		for range domainWithPathsList {
 			response := <-responsesCh
-			if response.valid {
+			if response.valid && !foundValid {
 				firstValidResponseCh <- response.validResponse
-				return
+				foundValid = true
 			}
 		}
 		close(firstValidResponseCh)
 	}()
 	result, ok := <-firstValidResponseCh
+	cancel()
 	if !ok {
 		return nil, errors.New("no valid links were found")
 	}
@@ -200,16 +211,17 @@ func (d *DomainWithPath) GetSegmentChunkedUrl(segment *m3u8.MediaSegment) string
 
 func (d *DomainWithPath) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *m3u8.MediaPlaylist {
 	for _, segment := range playlist.Segments {
-		if segment == nil {
-			continue
-		}
 		segment.URI = d.GetSegmentChunkedUrl(segment)
 	}
 	return playlist
 }
 
-func (d *DomainWithPath) GetM3U8Body() ([]byte, error) {
-	resp, err := http.Get(d.GetIndexDvrUrl())
+func (d *DomainWithPath) GetM3U8Body(ctx context.Context) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.GetIndexDvrUrl(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +232,7 @@ func (d *DomainWithPath) GetM3U8Body() ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func DecodeMediaPlaylist(data []byte, strict bool) (*m3u8.MediaPlaylist, error) {
+func DecodeMediaPlaylistFilterNilSegments(data []byte, strict bool) (*m3u8.MediaPlaylist, error) {
 	p, listType, err := m3u8.Decode(*bytes.NewBuffer(data), strict)
 	if err != nil {
 		return nil, err
@@ -228,7 +240,15 @@ func DecodeMediaPlaylist(data []byte, strict bool) (*m3u8.MediaPlaylist, error) 
 	if listType != m3u8.MEDIA {
 		return nil, errors.New("m3u8 is not media type")
 	}
-	return p.(*m3u8.MediaPlaylist), nil
+	mediapl := p.(*m3u8.MediaPlaylist)
+	segments := []*m3u8.MediaSegment{}
+	for _, segment := range mediapl.Segments {
+		if segment != nil {
+			segments = append(segments, segment)
+		}
+	}
+	mediapl.Segments = segments
+	return mediapl, nil
 }
 
 func getMutedURI(segmentUri string) string {
@@ -243,10 +263,8 @@ func getMutedURI(segmentUri string) string {
 func MuteMediaSegments(playlist *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
 	nonnilSegments := []*m3u8.MediaSegment{}
 	for _, segment := range playlist.Segments {
-		if segment != nil {
-			segment.URI = getMutedURI(segment.URI)
-			nonnilSegments = append(nonnilSegments, segment)
-		}
+		segment.URI = getMutedURI(segment.URI)
+		nonnilSegments = append(nonnilSegments, segment)
 	}
 	return nonnilSegments
 }
@@ -254,9 +272,69 @@ func MuteMediaSegments(playlist *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
 func GetMediaPlaylistDuration(mediapl *m3u8.MediaPlaylist) time.Duration {
 	duration := 0.0
 	for _, segment := range mediapl.Segments {
-		if segment != nil {
-			duration += segment.Duration
-		}
+		duration += segment.Duration
 	}
 	return time.Duration(duration * float64(time.Second))
+}
+
+func GetValidSegments(mediapl *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
+	urls := []string{}
+	for _, segment := range mediapl.Segments {
+		urls = append(urls, segment.URI)
+	}
+	sortedValidIndices := getSortedIndicesOfValidUrls(urls)
+	segments := []*m3u8.MediaSegment{}
+	for _, validIndex := range sortedValidIndices {
+		segments = append(segments, mediapl.Segments[validIndex])
+	}
+	return segments
+}
+
+func GetMediaPlaylistWithValidSegments(rawPlaylist *m3u8.MediaPlaylist) (*m3u8.MediaPlaylist, error) {
+	validSegments := GetValidSegments(rawPlaylist)
+	numValidSegments := uint(len(validSegments))
+	mediapl, err := m3u8.NewMediaPlaylist(rawPlaylist.WinSize(), numValidSegments)
+	if err != nil {
+		return nil, err
+	}
+	for _, validSegment := range validSegments {
+		mediapl.AppendSegment(validSegment)
+	}
+	mediapl.TargetDuration = rawPlaylist.TargetDuration
+	mediapl.MediaType = rawPlaylist.MediaType
+	mediapl.Closed = rawPlaylist.Closed
+	return mediapl, err
+}
+
+func getSortedIndicesOfValidUrls(urls []string) []int {
+	validIndices := []int{}
+	validIndicesCh := make(chan urlIndexResponse)
+	for index, url := range urls {
+		go func(index int, url string) {
+			if urlIsValid(url) {
+				validIndicesCh <- urlIndexResponse{index: index, valid: true}
+			} else {
+				validIndicesCh <- urlIndexResponse{index: index, valid: false}
+			}
+		}(index, url)
+	}
+	for range urls {
+		response := <-validIndicesCh
+		if response.valid {
+			validIndices = append(validIndices, response.index)
+		}
+	}
+	sort.Slice(validIndices, func(i, j int) bool {
+		return validIndices[i] < validIndices[j]
+	})
+	return validIndices
+}
+
+func urlIsValid(url string) bool {
+	resp, err := http.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == 200
 }
