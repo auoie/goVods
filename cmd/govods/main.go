@@ -37,10 +37,10 @@ func writeMediaPlaylist(mediapl *m3u8.MediaPlaylist, dpi *vods.ValidDwpResponse)
 
 func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) error {
 	dpi, err := vods.GetFirstValidDwp(context.Background(), domainWithPathsList)
-	fmt.Println(fmt.Sprint("Found valid url ", dpi.Dwp.GetIndexDvrUrl()))
 	if err != nil {
 		return err
 	}
+	fmt.Println(fmt.Sprint("Found valid url ", dpi.Dwp.GetIndexDvrUrl()))
 	mediapl, err := vods.DecodeMediaPlaylistFilterNilSegments(dpi.Body, true)
 	if err != nil {
 		return err
