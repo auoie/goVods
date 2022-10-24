@@ -47,7 +47,7 @@ func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) e
 	}
 	vods.MuteMediaSegments(mediapl)
 	dpi.Dwp.MakePathsExplicit(mediapl)
-	checkInvalid := ctx.Bool("check-invalid")
+	checkInvalid := ctx.Bool("filter-invalid")
 	if checkInvalid {
 		numTotalSegments := len(mediapl.Segments)
 		mediapl, err = vods.GetMediaPlaylistWithValidSegments(mediapl)
@@ -86,7 +86,7 @@ func main() {
 						Required: true,
 					},
 					&cli.BoolFlag{
-						Name:  "check-invalid",
+						Name:  "filter-invalid",
 						Usage: "Filter out all of the invalid segments in the m3u8 file",
 					},
 				},
@@ -122,7 +122,7 @@ func main() {
 						Required: true,
 					},
 					&cli.BoolFlag{
-						Name:  "check-invalid",
+						Name:  "filter-invalid",
 						Usage: "Filter out all of the invalid segments in the m3u8 file",
 					},
 				},
@@ -158,7 +158,7 @@ func main() {
 						Required: true,
 					},
 					&cli.BoolFlag{
-						Name:  "check-invalid",
+						Name:  "filter-invalid",
 						Usage: "Filter out all of the invalid segments in the m3u8 file",
 					},
 				},
