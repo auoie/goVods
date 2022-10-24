@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/Khan/genqlient v0.5.0
+	github.com/auoie/firstNonErr v1.0.0
 	github.com/grafov/m3u8 v0.11.1
 	github.com/urfave/cli/v2 v2.19.2
 )

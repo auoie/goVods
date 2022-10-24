@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	firstnonerr "github.com/auoie/firstNonErr"
 	"github.com/grafov/m3u8"
 )
 
@@ -59,11 +60,6 @@ type DomainWithPaths struct {
 type ValidDwpResponse struct {
 	Dwp  *DomainWithPath
 	Body []byte
-}
-
-type dwpResponse struct {
-	validResponse *ValidDwpResponse
-	valid         bool
 }
 
 type urlIndexResponse struct {
@@ -121,80 +117,24 @@ func (domainWithPaths *DomainWithPaths) ToListOfDomainWithPath() []*DomainWithPa
 }
 
 func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context) (*ValidDwpResponse, error) {
-	domainWithPathList := domainWithPaths.ToListOfDomainWithPath()
-	if len(domainWithPathList) < 1 {
-		return nil, errors.New("no urls")
-	}
-	// establish TCP connection for reuse
-	// https://groups.google.com/g/golang-nuts/c/5T5aiDRl_cw/m/zYPGtCOYBwAJ
-	firstDomainWithPath := domainWithPathList[0]
-	body, err := firstDomainWithPath.GetM3U8Body(ctx)
-	if err == nil {
-		return &ValidDwpResponse{Dwp: firstDomainWithPath, Body: body}, nil
-	}
-	// reuse with other requests
-	restDomainWithPathList := domainWithPathList[1:]
-	firstValidResponseCh := make(chan *ValidDwpResponse)
-	responsesCh := make(chan *dwpResponse)
-	for _, dwp := range restDomainWithPathList {
-		go func(dwp *DomainWithPath) {
-			body, err := dwp.GetM3U8Body(ctx)
-			if err == nil {
-				responsesCh <- &dwpResponse{validResponse: &ValidDwpResponse{Dwp: dwp, Body: body}, valid: true}
-			} else {
-				responsesCh <- &dwpResponse{validResponse: nil, valid: false}
-			}
-		}(dwp)
-	}
-	go func() {
-		foundValid := false
-		for range restDomainWithPathList {
-			dwpResponse := <-responsesCh
-			if dwpResponse.valid && !foundValid {
-				firstValidResponseCh <- dwpResponse.validResponse
-				foundValid = true
-			}
-		}
-		close(firstValidResponseCh)
-	}()
-	result, ok := <-firstValidResponseCh
-	if !ok {
-		return nil, errors.New("no valid links were found")
-	}
-	return result, nil
+	return firstnonerr.GetFirstNonError(
+		ctx,
+		domainWithPaths.ToListOfDomainWithPath(),
+		0,
+		func(ctx context.Context, item *DomainWithPath) (*ValidDwpResponse, error) {
+			body, err := item.GetM3U8Body(ctx)
+			return &ValidDwpResponse{Dwp: item, Body: body}, err
+		})
 }
 
 func GetFirstValidDwp(ctx context.Context, domainWithPathsList []*DomainWithPaths) (*ValidDwpResponse, error) {
-	firstValidResponseCh := make(chan *ValidDwpResponse)
-	responsesCh := make(chan *dwpResponse)
-	ctx, cancel := context.WithCancel(ctx)
-	for _, domainWithPaths := range domainWithPathsList {
-		go func(domainWithPaths *DomainWithPaths) {
-			validDwpResponse, err := domainWithPaths.GetFirstValidDWP(ctx)
-			if err == nil {
-				responsesCh <- &dwpResponse{validResponse: validDwpResponse, valid: true}
-			} else {
-				responsesCh <- &dwpResponse{validResponse: nil, valid: false}
-			}
-		}(domainWithPaths)
-	}
-	go func() {
-		foundValid := false
-		for range domainWithPathsList {
-			response := <-responsesCh
-			if response.valid && !foundValid {
-				firstValidResponseCh <- response.validResponse
-				foundValid = true
-			}
-		}
-		close(firstValidResponseCh)
-	}()
-	result, ok := <-firstValidResponseCh
-	cancel()
-	if !ok {
-		return nil, errors.New("no valid links were found")
-	}
-	return result, nil
+	return firstnonerr.GetFirstNonError(
+		ctx,
+		domainWithPathsList,
+		0,
+		func(ctx context.Context, item *DomainWithPaths) (*ValidDwpResponse, error) {
+			return item.GetFirstValidDWP(ctx)
+		})
 }
 
 func (d *DomainWithPath) GetVideoData() *VideoData {
