@@ -47,10 +47,10 @@ func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) e
 	}
 	vods.MuteMediaSegments(mediapl)
 	dpi.Dwp.MakePathsExplicit(mediapl)
-	checkInvalid := ctx.Bool("filter-invalid")
-	if checkInvalid {
+	checkInvalidConcurrent := ctx.Int("filter-invalid")
+	if checkInvalidConcurrent > 0 {
 		numTotalSegments := len(mediapl.Segments)
-		mediapl, err = vods.GetMediaPlaylistWithValidSegments(mediapl)
+		mediapl, err = vods.GetMediaPlaylistWithValidSegments(mediapl, checkInvalidConcurrent)
 		if err != nil {
 			return err
 		}
@@ -85,9 +85,9 @@ func main() {
 						Usage:    "stream UTC start time in the format '2006-01-02 15:04:05' (year-month-day hour:minute:second)",
 						Required: true,
 					},
-					&cli.BoolFlag{
+					&cli.IntFlag{
 						Name:  "filter-invalid",
-						Usage: "Filter out all of the invalid segments in the m3u8 file",
+						Usage: "Filter out all of the invalid segments in the m3u8 file with concurrency level",
 					},
 				},
 				Action: func(ctx *cli.Context) error {
@@ -121,9 +121,9 @@ func main() {
 						Usage:    "stream UTC start time in the format '02-01-2006 15:04' (day-month-year hour:minute)",
 						Required: true,
 					},
-					&cli.BoolFlag{
+					&cli.IntFlag{
 						Name:  "filter-invalid",
-						Usage: "Filter out all of the invalid segments in the m3u8 file",
+						Usage: "Filter out all of the invalid segments in the m3u8 file with concurrency level",
 					},
 				},
 				Action: func(ctx *cli.Context) error {
@@ -157,9 +157,9 @@ func main() {
 						Usage:    "stream UTC start time in the format '2006-01-02T15:04:05Z' (year-month-dayThour:minute:secondZ)",
 						Required: true,
 					},
-					&cli.BoolFlag{
+					&cli.IntFlag{
 						Name:  "filter-invalid",
-						Usage: "Filter out all of the invalid segments in the m3u8 file",
+						Usage: "Filter out all of the invalid segments in the m3u8 file with concurrency level",
 					},
 				},
 				Action: func(ctx *cli.Context) error {

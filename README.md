@@ -94,12 +94,13 @@ yt-dlp http://localhost:8080/{streamername}/{stuff}.m3u8 --concurrent-fragments 
 
 - _A VOD might be shorter than expected._ If a stream goes down for any length of time (even a few seconds), Twitch treats this as a new stream with a new `videoid`. In order to provide more accurate information, SullyGnome and TwitchTracker combine this into a single cast. `streamscharts.com` seems to be the only website that separates the two VODs. In this case, you should check `streamscharts.com` for the video ids.
 - _A streamer changed their name._ In this case, you need to use the streamer's login name at the time the stream started.
-- _A valid URL was found, but some segments are not playable._ If some of the segments are not playable, you can filter them out with the `--filter-invalid` flag.
+- _A valid URL was found, but some segments are not playable._ If some of the segments are not playable, you can filter them out with the `--filter-invalid` flag, specifying the number of goroutines to use while checking the segments.
   For example,
   ```bash
-  ./govods sg-manual-get-m3u8 --time {time} --streamer {streamer} --videoid {videoid} --filter-invalid
+  ./govods sg-manual-get-m3u8 --time {time} --streamer {streamer} --videoid {videoid} --filter-invalid 100
   ```
-  This takes longer.
+  This takes longer. It is slow if a lot of the segments are available.
+  If a lot of the video is missing, it will be faster.
 
 ## References
 

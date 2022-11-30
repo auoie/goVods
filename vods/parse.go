@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
-	firstnonerr "github.com/auoie/firstNonErr"
+	firstnonerr "github.com/auoie/first-nonerr"
 	"github.com/grafov/m3u8"
 )
 
@@ -43,18 +45,18 @@ type VideoData struct {
 	Time         time.Time
 }
 
-type videoPath struct {
-	urlPath   string // e.g. {hash}_{streamername}_{videoid}_{unixtime}
-	videoData *VideoData
+type VideoPath struct {
+	UrlPath   string // e.g. {hash}_{streamername}_{videoid}_{unixtime}
+	VideoData *VideoData
 }
 type DomainWithPath struct {
-	domain string // e.g. https://d1m7jfoe9zdc1j.cloudfront.net/
-	path   *videoPath
+	Domain string // e.g. https://d1m7jfoe9zdc1j.cloudfront.net/
+	Path   *VideoPath
 }
 
 type DomainWithPaths struct {
 	domain string // e.g. https://d1m7jfoe9zdc1j.cloudfront.net/
-	paths  []*videoPath
+	paths  []*VideoPath
 }
 
 type ValidDwpResponse struct {
@@ -67,13 +69,64 @@ type urlIndexResponse struct {
 	valid bool
 }
 
+// e.g. c5992ececce7bd7d350d_gmhikaru_47198535725_1664038929
+func UrlPathToVideoData(urlPath string) (*VideoData, error) {
+	allUnderscoreIndices := []int{}
+	for i := 0; i < len(urlPath); i++ {
+		char := urlPath[i]
+		if char == '_' {
+			allUnderscoreIndices = append(allUnderscoreIndices, i)
+		}
+	}
+	numUnderscores := len(allUnderscoreIndices)
+	if numUnderscores < 3 {
+		return nil, errors.New("url path does not have enough underscores")
+	}
+	underscoreIndices := [3]int{allUnderscoreIndices[0], allUnderscoreIndices[numUnderscores-2], allUnderscoreIndices[numUnderscores-1]}
+	streamerName := urlPath[underscoreIndices[0]+1 : underscoreIndices[1]]
+	videoid := urlPath[underscoreIndices[1]+1 : underscoreIndices[2]]
+	unixtimeString := urlPath[underscoreIndices[2]+1:]
+	unixtimeInt, err := strconv.ParseInt(unixtimeString, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	videoTime := time.Unix(unixtimeInt, 0)
+	return &VideoData{StreamerName: streamerName, VideoId: videoid, Time: videoTime}, nil
+}
+
+// e.g. https://d1m7jfoe9zdc1j.cloudfront.net/c5992ececce7bd7d350d_gmhikaru_47198535725_1664038929
+// e.g. https://d1m7jfoe9zdc1j.cloudfront.net/c5992ececce7bd7d350d_gmhikaru_47198535725_1664038929/storyboards/1600104857-info.json
+func UrlToDomainWithPath(urlStr string) (*DomainWithPath, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return nil, err
+	}
+	pathParts := strings.Split(u.Path, "/")
+	if len(pathParts) < 2 {
+		return nil, errors.New("url is not valid")
+	}
+	mainPart := pathParts[1]
+	videoData, err := UrlPathToVideoData(mainPart)
+	if err != nil {
+		return nil, err
+	}
+	result := DomainWithPath{
+		Domain: fmt.Sprint(u.Scheme, "://", u.Host, "/"),
+		Path: &VideoPath{
+			UrlPath:   mainPart,
+			VideoData: videoData,
+		},
+	}
+	return &result, nil
+}
+
 func (videoData *VideoData) String() string {
 	values := []string{videoData.StreamerName, videoData.Time.Format("2006-01-02_15:04:05"), videoData.VideoId}
 	return strings.Join(values, "_")
 }
 
-func (videoData *VideoData) GetVideoPath() *videoPath {
-	return &videoPath{urlPath: videoData.GetUrlPath(), videoData: videoData}
+func (videoData *VideoData) GetVideoPath() *VideoPath {
+	return &VideoPath{UrlPath: videoData.GetUrlPath(), VideoData: videoData}
 }
 
 func (videoData *VideoData) GetUrlPath() string {
@@ -96,7 +149,7 @@ func (videoData *VideoData) WithOffset(seconds int) *VideoData {
 }
 
 func (videoData *VideoData) GetDomainWithPathsList(domains []string, seconds int) []*DomainWithPaths {
-	videoPaths := []*videoPath{}
+	videoPaths := []*VideoPath{}
 	for i := 0; i < seconds; i++ {
 		videoPaths = append(videoPaths, videoData.WithOffset(i).GetVideoPath())
 	}
@@ -111,15 +164,28 @@ func (domainWithPaths *DomainWithPaths) ToListOfDomainWithPath() []*DomainWithPa
 	result := []*DomainWithPath{}
 	domain := domainWithPaths.domain
 	for _, path := range domainWithPaths.paths {
-		result = append(result, &DomainWithPath{domain: domain, path: path})
+		result = append(result, &DomainWithPath{Domain: domain, Path: path})
 	}
 	return result
 }
 
 func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context) (*ValidDwpResponse, error) {
+	domainWithPathList := domainWithPaths.ToListOfDomainWithPath()
+	if len(domainWithPathList) < 1 {
+		return nil, errors.New("no urls")
+	}
+	// establish TCP connection for reuse
+	// https://groups.google.com/g/golang-nuts/c/5T5aiDRl_cw/m/zYPGtCOYBwAJ
+	firstDomainWithPath := domainWithPathList[0]
+	body, err := firstDomainWithPath.GetM3U8Body(ctx)
+	if err == nil {
+		return &ValidDwpResponse{Dwp: firstDomainWithPath, Body: body}, nil
+	}
+	// reuse with other requests
+	restDomainWithPathList := domainWithPathList[1:]
 	return firstnonerr.GetFirstNonError(
 		ctx,
-		domainWithPaths.ToListOfDomainWithPath(),
+		restDomainWithPathList,
 		0,
 		func(ctx context.Context, item *DomainWithPath) (*ValidDwpResponse, error) {
 			body, err := item.GetM3U8Body(ctx)
@@ -137,16 +203,20 @@ func GetFirstValidDwp(ctx context.Context, domainWithPathsList []*DomainWithPath
 		})
 }
 
+func (d *DomainWithPath) GetDomain() string {
+	return d.Domain
+}
+
 func (d *DomainWithPath) GetVideoData() *VideoData {
-	return d.path.videoData
+	return d.Path.VideoData
 }
 
 func (d *DomainWithPath) GetIndexDvrUrl() string {
-	return d.domain + d.path.urlPath + "/chunked/index-dvr.m3u8"
+	return d.Domain + d.Path.UrlPath + "/chunked/index-dvr.m3u8"
 }
 
 func (d *DomainWithPath) GetSegmentChunkedUrl(segment *m3u8.MediaSegment) string {
-	return d.domain + d.path.urlPath + "/chunked/" + segment.URI
+	return d.Domain + d.Path.UrlPath + "/chunked/" + segment.URI
 }
 
 func (d *DomainWithPath) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *m3u8.MediaPlaylist {
@@ -217,12 +287,12 @@ func GetMediaPlaylistDuration(mediapl *m3u8.MediaPlaylist) time.Duration {
 	return time.Duration(duration * float64(time.Second))
 }
 
-func GetValidSegments(mediapl *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
+func GetValidSegments(mediapl *m3u8.MediaPlaylist, concurrent int) []*m3u8.MediaSegment {
 	urls := []string{}
 	for _, segment := range mediapl.Segments {
 		urls = append(urls, segment.URI)
 	}
-	sortedValidIndices := getSortedIndicesOfValidUrls(urls)
+	sortedValidIndices := getSortedIndicesOfValidUrls(urls, concurrent)
 	segments := []*m3u8.MediaSegment{}
 	for _, validIndex := range sortedValidIndices {
 		segments = append(segments, mediapl.Segments[validIndex])
@@ -230,8 +300,8 @@ func GetValidSegments(mediapl *m3u8.MediaPlaylist) []*m3u8.MediaSegment {
 	return segments
 }
 
-func GetMediaPlaylistWithValidSegments(rawPlaylist *m3u8.MediaPlaylist) (*m3u8.MediaPlaylist, error) {
-	validSegments := GetValidSegments(rawPlaylist)
+func GetMediaPlaylistWithValidSegments(rawPlaylist *m3u8.MediaPlaylist, concurrent int) (*m3u8.MediaPlaylist, error) {
+	validSegments := GetValidSegments(rawPlaylist, concurrent)
 	numValidSegments := uint(len(validSegments))
 	mediapl, err := m3u8.NewMediaPlaylist(rawPlaylist.WinSize(), numValidSegments)
 	if err != nil {
@@ -246,24 +316,58 @@ func GetMediaPlaylistWithValidSegments(rawPlaylist *m3u8.MediaPlaylist) (*m3u8.M
 	return mediapl, err
 }
 
-func getSortedIndicesOfValidUrls(urls []string) []int {
+const clearLine = "\033[2K"
+
+func getSortedIndicesOfValidUrls(urls []string, concurrent int) []int {
 	validIndices := []int{}
 	validIndicesCh := make(chan urlIndexResponse)
-	for index, url := range urls {
-		go func(index int, url string) {
-			if urlIsValid(url) {
-				validIndicesCh <- urlIndexResponse{index: index, valid: true}
-			} else {
-				validIndicesCh <- urlIndexResponse{index: index, valid: false}
+	requestIndicesCh := make(chan int)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for i := 0; i < concurrent; i++ {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case requestIndex := <-requestIndicesCh:
+					url := urls[requestIndex]
+					valid := urlIsValid(url)
+					if valid {
+						validIndicesCh <- urlIndexResponse{index: requestIndex, valid: true}
+					} else {
+						validIndicesCh <- urlIndexResponse{index: requestIndex, valid: false}
+					}
+				}
 			}
-		}(index, url)
+		}()
 	}
+	go func() {
+		for i := 0; i < len(urls); i++ {
+			select {
+			case <-ctx.Done():
+				return
+			case requestIndicesCh <- i:
+			}
+		}
+	}()
+	doneCount := 0
+Loop:
 	for range urls {
-		response := <-validIndicesCh
-		if response.valid {
-			validIndices = append(validIndices, response.index)
+		select {
+		case <-ctx.Done():
+			break Loop
+		case response := <-validIndicesCh:
+			doneCount++
+			fmt.Print(clearLine)
+			fmt.Print("\r")
+			fmt.Print(fmt.Sprint("Processed ", doneCount, " segments out of ", len(urls)))
+			if response.valid {
+				validIndices = append(validIndices, response.index)
+			}
 		}
 	}
+	fmt.Println()
 	sort.Slice(validIndices, func(i, j int) bool {
 		return validIndices[i] < validIndices[j]
 	})
