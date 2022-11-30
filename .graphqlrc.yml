@@ -1,2 +1,0 @@
-schema: "twitchgql/schema.graphql"
-documents: "twitchgql/genqlient.graphql"
