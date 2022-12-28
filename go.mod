@@ -3,9 +3,9 @@ module github.com/auoie/goVods
 go 1.19
 
 require (
-	github.com/auoie/first-nonerr v1.0.1
+	github.com/auoie/first-nonerr v1.1.0
 	github.com/grafov/m3u8 v0.11.1
-	github.com/urfave/cli/v2 v2.19.2
+	github.com/urfave/cli/v2 v2.23.7
 )
 
 require (
