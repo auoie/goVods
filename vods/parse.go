@@ -175,6 +175,8 @@ func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context) (*
 	body, err := firstDomainWithPath.GetM3U8Body(ctx)
 	if err == nil {
 		return &ValidDwpResponse{Dwp: firstDomainWithPath, Body: body}, nil
+	} else if len(domainWithPathList) == 1 {
+		return nil, err
 	}
 	// reuse with other requests
 	restDomainWithPathList := domainWithPathList[1:]
