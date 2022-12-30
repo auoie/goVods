@@ -120,13 +120,36 @@ func (videoData *VideoData) String() string {
 	return strings.Join(values, "_")
 }
 
-func (videoData *VideoData) GetVideoPath() *VideoPath {
-	return &VideoPath{UrlPath: videoData.GetUrlPath(), VideoData: videoData}
+func (videoData *VideoData) GetVideoPath(toUnix bool) *VideoPath {
+	return &VideoPath{UrlPath: videoData.GetUrlPath(toUnix), VideoData: videoData}
 }
 
-func (videoData *VideoData) GetUrlPath() string {
-	unixTime := videoData.Time.Unix()
-	baseUrl := videoData.StreamerName + "_" + videoData.VideoId + "_" + fmt.Sprint(unixTime)
+func (videoData *VideoData) GetUrlPath(toUnix bool) string {
+	if toUnix {
+		return videoData.getUrlTimeUnix()
+	} else {
+		return videoData.getUrlTimeSecond()
+	}
+}
+
+func timeToUnixString(t time.Time) string {
+	return strconv.FormatInt(t.Unix(), 10)
+}
+
+func timeToSecond(t time.Time) string {
+	return strconv.Itoa(t.Second())
+}
+
+func (videoData *VideoData) getUrlTimeUnix() string {
+	return videoData.getUrlPath(timeToUnixString)
+}
+
+func (videoData *VideoData) getUrlTimeSecond() string {
+	return videoData.getUrlPath(timeToSecond)
+}
+
+func (videoData *VideoData) getUrlPath(timetoString func(time.Time) string) string {
+	baseUrl := fmt.Sprint(videoData.StreamerName, "_", videoData.VideoId, "_", timetoString(videoData.Time))
 	hasher := sha1.New()
 	io.WriteString(hasher, baseUrl)
 	hash := hex.EncodeToString(hasher.Sum(nil))
@@ -143,10 +166,10 @@ func (videoData *VideoData) WithOffset(seconds int) *VideoData {
 	}
 }
 
-func (videoData *VideoData) GetDomainWithPathsList(domains []string, seconds int) []*DomainWithPaths {
+func (videoData *VideoData) GetDomainWithPathsList(domains []string, seconds int, toUnix bool) []*DomainWithPaths {
 	videoPaths := []*VideoPath{}
 	for i := 0; i < seconds; i++ {
-		videoPaths = append(videoPaths, videoData.WithOffset(i).GetVideoPath())
+		videoPaths = append(videoPaths, videoData.WithOffset(i).GetVideoPath(toUnix))
 	}
 	domainWithPathsList := []*DomainWithPaths{}
 	for _, domain := range domains {
@@ -164,7 +187,7 @@ func (domainWithPaths *DomainWithPaths) ToListOfDomainWithPath() []*DomainWithPa
 	return result
 }
 
-func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context) (*ValidDwpResponse, error) {
+func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context, client *http.Client) (*ValidDwpResponse, error) {
 	domainWithPathList := domainWithPaths.ToListOfDomainWithPath()
 	if len(domainWithPathList) < 1 {
 		return nil, errors.New("no urls")
@@ -172,7 +195,7 @@ func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context) (*
 	// establish TCP connection for reuse
 	// https://groups.google.com/g/golang-nuts/c/5T5aiDRl_cw/m/zYPGtCOYBwAJ
 	firstDomainWithPath := domainWithPathList[0]
-	body, err := firstDomainWithPath.GetM3U8Body(ctx)
+	body, err := firstDomainWithPath.GetM3U8Body(ctx, client)
 	if err == nil {
 		return &ValidDwpResponse{Dwp: firstDomainWithPath, Body: body}, nil
 	} else if len(domainWithPathList) == 1 {
@@ -185,18 +208,18 @@ func (domainWithPaths *DomainWithPaths) GetFirstValidDWP(ctx context.Context) (*
 		restDomainWithPathList,
 		0,
 		func(ctx context.Context, item *DomainWithPath) (*ValidDwpResponse, error) {
-			body, err := item.GetM3U8Body(ctx)
+			body, err := item.GetM3U8Body(ctx, client)
 			return &ValidDwpResponse{Dwp: item, Body: body}, err
 		})
 }
 
-func GetFirstValidDwp(ctx context.Context, domainWithPathsList []*DomainWithPaths) (*ValidDwpResponse, error) {
+func GetFirstValidDwp(ctx context.Context, domainWithPathsList []*DomainWithPaths, client *http.Client) (*ValidDwpResponse, error) {
 	return firstnonerr.GetFirstNonError(
 		ctx,
 		domainWithPathsList,
 		0,
 		func(ctx context.Context, item *DomainWithPaths) (*ValidDwpResponse, error) {
-			return item.GetFirstValidDWP(ctx)
+			return item.GetFirstValidDWP(ctx, client)
 		})
 }
 
@@ -223,12 +246,12 @@ func (d *DomainWithPath) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *m3u8.M
 	return playlist
 }
 
-func (d *DomainWithPath) GetM3U8Body(ctx context.Context) ([]byte, error) {
+func (d *DomainWithPath) GetM3U8Body(ctx context.Context, client *http.Client) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.GetIndexDvrUrl(), nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -284,12 +307,12 @@ func GetMediaPlaylistDuration(mediapl *m3u8.MediaPlaylist) time.Duration {
 	return time.Duration(duration * float64(time.Second))
 }
 
-func GetValidSegments(mediapl *m3u8.MediaPlaylist, concurrent int) []*m3u8.MediaSegment {
+func GetValidSegments(mediapl *m3u8.MediaPlaylist, concurrent int, client *http.Client) []*m3u8.MediaSegment {
 	urls := []string{}
 	for _, segment := range mediapl.Segments {
 		urls = append(urls, segment.URI)
 	}
-	sortedValidIndices := getSortedIndicesOfValidUrls(urls, concurrent)
+	sortedValidIndices := getSortedIndicesOfValidUrls(urls, concurrent, client)
 	segments := []*m3u8.MediaSegment{}
 	for _, validIndex := range sortedValidIndices {
 		segments = append(segments, mediapl.Segments[validIndex])
@@ -297,8 +320,8 @@ func GetValidSegments(mediapl *m3u8.MediaPlaylist, concurrent int) []*m3u8.Media
 	return segments
 }
 
-func GetMediaPlaylistWithValidSegments(rawPlaylist *m3u8.MediaPlaylist, concurrent int) (*m3u8.MediaPlaylist, error) {
-	validSegments := GetValidSegments(rawPlaylist, concurrent)
+func GetMediaPlaylistWithValidSegments(rawPlaylist *m3u8.MediaPlaylist, concurrent int, client *http.Client) (*m3u8.MediaPlaylist, error) {
+	validSegments := GetValidSegments(rawPlaylist, concurrent, client)
 	numValidSegments := uint(len(validSegments))
 	mediapl, err := m3u8.NewMediaPlaylist(rawPlaylist.WinSize(), numValidSegments)
 	if err != nil {
@@ -315,7 +338,7 @@ func GetMediaPlaylistWithValidSegments(rawPlaylist *m3u8.MediaPlaylist, concurre
 
 const clearLine = "\033[2K"
 
-func getSortedIndicesOfValidUrls(urls []string, concurrent int) []int {
+func getSortedIndicesOfValidUrls(urls []string, concurrent int, client *http.Client) []int {
 	validIndices := []int{}
 	validIndicesCh := make(chan urlIndexResponse)
 	requestIndicesCh := make(chan int)
@@ -329,7 +352,7 @@ func getSortedIndicesOfValidUrls(urls []string, concurrent int) []int {
 					return
 				case requestIndex := <-requestIndicesCh:
 					url := urls[requestIndex]
-					valid := urlIsValid(url)
+					valid := urlIsValid(url, client)
 					if valid {
 						validIndicesCh <- urlIndexResponse{index: requestIndex, valid: true}
 					} else {
@@ -371,8 +394,8 @@ Loop:
 	return validIndices
 }
 
-func urlIsValid(url string) bool {
-	resp, err := http.Get(url)
+func urlIsValid(url string, client *http.Client) bool {
+	resp, err := client.Get(url)
 	if err != nil {
 		return false
 	}

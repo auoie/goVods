@@ -101,9 +101,6 @@ yt-dlp http://localhost:8080/{streamername}/{stuff}.m3u8 --concurrent-fragments 
   ```
   This takes longer. It is slow if a lot of the segments are available.
   If a lot of the video is missing, it will be faster.
-- _The VOD's URL unix timestamp is one second minus the start time_. In rare cases, the unix timestamp in the URL is one second minus the start time reported by the Twitch GraphQL API.
-  In this case, just subtract one second from the time.
-  This case applies to the SullyGnome and TwitchTracker options which require a time that includes the second.
 
 ## References
 

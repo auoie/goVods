@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,22 +37,50 @@ func writeMediaPlaylist(mediapl *m3u8.MediaPlaylist, dpi *vods.ValidDwpResponse)
 	return nil
 }
 
-func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) error {
-	dpi, err := vods.GetFirstValidDwp(context.Background(), domainWithPathsList)
+func makeRobustClient() *http.Client {
+	timeout := 10 * time.Second
+	dialer := &net.Dialer{
+		Timeout: timeout,
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: &http.Transport{DialContext: dialer.DialContext},
+	}
+}
+
+func getValidDwp(ctx context.Context, domains []string, seconds int, videoData *vods.VideoData, client *http.Client) (*vods.ValidDwpResponse, error) {
+	domainWithPathsList := videoData.GetDomainWithPathsList(vods.DOMAINS, seconds, true)
+	dwpAndBody, err := vods.GetFirstValidDwp(ctx, domainWithPathsList, client)
+	if err == nil {
+		return dwpAndBody, nil
+	}
+	// very rarely, a stream will use the seconds of the time rather than the unix time in the m3u8 file name
+	domainWithPathsList = videoData.GetDomainWithPathsList(vods.DOMAINS, seconds, false)
+	dwpAndBody, err = vods.GetFirstValidDwp(ctx, domainWithPathsList, client)
+	if err == nil {
+		return dwpAndBody, nil
+	}
+	return nil, err
+}
+
+func mainHelper(seconds int, videoData *vods.VideoData, ctx *cli.Context) error {
+	videoData = videoData.WithOffset(-1) // some m3u8 file names use a time that is 1 second minus the provided time
+	client := makeRobustClient()
+	dwpAndBody, err := getValidDwp(ctx.Context, vods.DOMAINS, seconds+1, videoData, client)
 	if err != nil {
 		return err
 	}
-	fmt.Println(fmt.Sprint("Found valid url ", dpi.Dwp.GetIndexDvrUrl()))
-	mediapl, err := vods.DecodeMediaPlaylistFilterNilSegments(dpi.Body, true)
+	fmt.Println(fmt.Sprint("Found valid url ", dwpAndBody.Dwp.GetIndexDvrUrl()))
+	mediapl, err := vods.DecodeMediaPlaylistFilterNilSegments(dwpAndBody.Body, true)
 	if err != nil {
 		return err
 	}
 	vods.MuteMediaSegments(mediapl)
-	dpi.Dwp.MakePathsExplicit(mediapl)
+	dwpAndBody.Dwp.MakePathsExplicit(mediapl)
 	checkInvalidConcurrent := ctx.Int("filter-invalid")
 	if checkInvalidConcurrent > 0 {
 		numTotalSegments := len(mediapl.Segments)
-		mediapl, err = vods.GetMediaPlaylistWithValidSegments(mediapl, checkInvalidConcurrent)
+		mediapl, err = vods.GetMediaPlaylistWithValidSegments(mediapl, checkInvalidConcurrent, client)
 		if err != nil {
 			return err
 		}
@@ -60,7 +90,7 @@ func mainHelper(domainWithPathsList []*vods.DomainWithPaths, ctx *cli.Context) e
 			return errors.New("0 valid segments found")
 		}
 	}
-	return writeMediaPlaylist(mediapl, dpi)
+	return writeMediaPlaylist(mediapl, dwpAndBody)
 }
 
 func main() {
@@ -99,7 +129,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					return mainHelper(videoData.GetDomainWithPathsList(vods.DOMAINS, 1), ctx)
+					return mainHelper(1, &videoData, ctx)
 				},
 			},
 			{
@@ -135,7 +165,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					return mainHelper(videoData.GetDomainWithPathsList(vods.DOMAINS, 60), ctx)
+					return mainHelper(60, &videoData, ctx)
 				},
 			},
 			{
@@ -171,7 +201,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					return mainHelper(videoData.GetDomainWithPathsList(vods.DOMAINS, 1), ctx)
+					return mainHelper(1, &videoData, ctx)
 				},
 			},
 		},
