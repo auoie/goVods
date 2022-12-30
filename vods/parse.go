@@ -64,6 +64,14 @@ type urlIndexResponse struct {
 	valid bool
 }
 
+func retryOnError[T any](doer func() (T, error)) (T, error) {
+	res, err := doer()
+	if err != nil {
+		return doer()
+	}
+	return res, err
+}
+
 // e.g. c5992ececce7bd7d350d_gmhikaru_47198535725_1664038929
 func UrlPathToVideoData(urlPath string) (*VideoData, error) {
 	allUnderscoreIndices := []int{}
@@ -251,7 +259,9 @@ func (d *DomainWithPath) GetM3U8Body(ctx context.Context, client *http.Client) (
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := retryOnError(func() (*http.Response, error) {
+		return client.Do(req)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +405,9 @@ Loop:
 }
 
 func urlIsValid(url string, client *http.Client) bool {
-	resp, err := client.Get(url)
+	resp, err := retryOnError(func() (*http.Response, error) {
+		return client.Get(url)
+	})
 	if err != nil {
 		return false
 	}
