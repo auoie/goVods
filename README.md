@@ -67,6 +67,39 @@ go build ./cmd/govods # Make the binary
   ./govods tt-manual-get-m3u8 --streamer {streamer} --videoid {videoid} --time {time}
   ```
 
+## Fetching Many Vods
+
+### Using stdin
+
+You can pass in a JSON array with the structure:
+
+```jsonc
+[
+  {
+    "time": "2024-03-26T20:49:54Z",
+    "id": "43903162955",
+    "name": "streamer"
+  },
+  {
+    "time": "2024-03-19T14:32:06Z",
+    "id": "42424695993",
+    "name": "streamer"
+  }
+  // ...
+]
+```
+
+The easiest way to get this JSON is to find the streamer at `sullygnome.com`, click on Streams, open Dev Tools > Network Tab, then click on "past 90 days". Then a JSON request should show up in the Network Tab. The URL should look something like `https://sullygnome.com/api/tables/channeltables/streams/90/13643637/%20/1/1/desc/0/50`.
+You can fetch this link with the [curl impersonate](https://github.com/lwthiker/curl-impersonate) CLI tool.
+Then you can use `jq` to transform it into the form above.
+Then pass the output to the STDIN of the program.
+
+```bash
+LINK=https://sullygnome.com/api/tables/channeltables/streams/90/13643637/%20/1/1/desc/0/50
+FILTER='[ .data[] | {time: .startDateTime, id: .streamId|tostring, name: .channelurl} ]'
+curl_chrome116 "$LINK" | jq -r "$FILTER" | ./govods stdin
+```
+
 ## Viewing or Downloading a VOD
 
 Once we have fetched the files, we can serve them over a local web server.

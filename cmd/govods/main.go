@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -49,13 +51,13 @@ func makeRobustClient() *http.Client {
 }
 
 func getValidDwp(ctx context.Context, domains []string, seconds int, videoData *vods.VideoData, client *http.Client) (*vods.ValidDwpResponse, error) {
-	domainWithPathsList := videoData.GetDomainWithPathsList(vods.DOMAINS, seconds, true)
+	domainWithPathsList := videoData.GetDomainWithPathsList(domains, seconds, true)
 	dwpAndBody, err := vods.GetFirstValidDwp(ctx, domainWithPathsList, client)
 	if err == nil {
 		return dwpAndBody, nil
 	}
 	// very rarely, a stream will use the seconds of the time rather than the unix time in the m3u8 file name
-	domainWithPathsList = videoData.GetDomainWithPathsList(vods.DOMAINS, seconds, false)
+	domainWithPathsList = videoData.GetDomainWithPathsList(domains, seconds, false)
 	dwpAndBody, err = vods.GetFirstValidDwp(ctx, domainWithPathsList, client)
 	if err == nil {
 		return dwpAndBody, nil
@@ -93,9 +95,40 @@ func mainHelper(seconds int, videoData *vods.VideoData, ctx *cli.Context) error 
 	return writeMediaPlaylist(mediapl, dwpAndBody)
 }
 
+type StdinJson []struct {
+	StartTime    time.Time `json:"time"`
+	StreamID     string    `json:"id"`
+	StreamerName string    `json:"name"`
+}
+
 func main() {
 	app := &cli.App{
 		Commands: []*cli.Command{
+			{
+				Name:  "stdin",
+				Usage: "Using a JSON data list passed to stdin, get the .m3u8 files",
+				Action: func(ctx *cli.Context) error {
+					stdinBytes, err := io.ReadAll(os.Stdin)
+					if err != nil {
+						return err
+					}
+					jsonData := StdinJson{}
+					decoder := json.NewDecoder(bytes.NewReader(stdinBytes))
+					decoder.DisallowUnknownFields()
+					err = decoder.Decode(&jsonData)
+					if err != nil {
+						return err
+					}
+					for _, datum := range jsonData {
+						videoData := vods.VideoData{StreamerName: datum.StreamerName, VideoId: datum.StreamID, Time: datum.StartTime}
+						err = mainHelper(1, &videoData, ctx)
+						if err != nil {
+							fmt.Println(err)
+						}
+					}
+					return nil
+				},
+			},
 			{
 				Name:  "tt-manual-get-m3u8",
 				Usage: "Using twitchtracker.com data, get an .m3u8 file which can be viewed in a media player.",
