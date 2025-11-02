@@ -247,10 +247,22 @@ func (d *DomainWithPath) GetSegmentChunkedUrl(segment *m3u8.MediaSegment) string
 	return d.Domain + d.Path.UrlPath + "/chunked/" + segment.URI
 }
 
+func (d *DomainWithPath) GetDvrPartialUrl() string {
+	return d.Domain + d.Path.UrlPath + "/chunked/"
+}
+
+func (d *DomainWithPath) makeExtXMapExplicit(playlist *m3u8.MediaPlaylist) *m3u8.MediaPlaylist {
+	if playlist.Map != nil {
+		playlist.Map.URI = d.GetDvrPartialUrl() + playlist.Map.URI
+	}
+	return playlist
+}
+
 func (d *DomainWithPath) MakePathsExplicit(playlist *m3u8.MediaPlaylist) *m3u8.MediaPlaylist {
 	for _, segment := range playlist.Segments {
 		segment.URI = d.GetSegmentChunkedUrl(segment)
 	}
+	d.makeExtXMapExplicit(playlist)
 	return playlist
 }
 
