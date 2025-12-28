@@ -33,6 +33,7 @@ var DOMAINS = []string{
 	"https://dqrpb9wgowsf5.cloudfront.net/",
 	"https://ds0h3roq6wcgc.cloudfront.net/",
 	"https://d3fi1amfgojobc.cloudfront.net/",
+	"https://d2vi6trrdongqn.cloudfront.net/",
 }
 
 type VideoData struct {
